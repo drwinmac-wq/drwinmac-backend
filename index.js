@@ -1,4 +1,6 @@
-// server.js - Dr.WinMac Lead Generation Backend
+// server.js - Velocity Strip-Search Backend
+// Trust > Sales - Honest assessments build long-term relationships
+
 import express from 'express';
 import cors from 'cors';
 import { Resend } from 'resend';
@@ -12,39 +14,71 @@ const resend = new Resend(process.env.RESEND_API_KEY);
 app.use(cors());
 app.use(express.json());
 
-// ========== FLAG DETECTION & SCORING ==========
+// ========== HONEST ANALYSIS & FLAG DETECTION ==========
+// PRIORITY: HARDWARE upgrades (battery, RAM, storage, old systems) THEN security
 
 function analyzeScanResults(data) {
   const flags = [];
   let priorityScore = 0;
   let totalOpportunity = 0;
 
-  // Battery Health Check
+  // === HARDWARE PRIORITY #1: OLD SYSTEM ===
+  // Check for old Intel Macs (2015 and earlier) - HIGHEST PRIORITY
+  if (data.macModel && data.cpuBrand) {
+    const modelYear = extractYear(data.macModel);
+    const isOldIntel = modelYear && modelYear <= 2015;
+    
+    if (isOldIntel) {
+      flags.push({
+        severity: 'CRITICAL',
+        category: 'Hardware Age',
+        clientFacing: `${modelYear} Mac - Limited lifespan for modern software`,
+        issue: `System from ${modelYear} - nearing end of practical life`,
+        recommendation: 'Replacement or major upgrade recommended',
+        upsell: 'New Mac consultation or targeted upgrades',
+        value: 0
+      });
+      priorityScore += 4; // HIGHEST PRIORITY
+    } else if (modelYear && modelYear <= 2017) {
+      flags.push({
+        severity: 'MODERATE',
+        category: 'Hardware Age',
+        clientFacing: `${modelYear} Mac - Consider upgrade planning`,
+        issue: `System from ${modelYear} - aging hardware`,
+        recommendation: 'Plan for replacement within 1-2 years',
+        upsell: 'Upgrade consultation',
+        value: 0
+      });
+      priorityScore += 2;
+    }
+  }
+
+  // === HARDWARE PRIORITY #2: BATTERY ===
   if (data.batteryCapacity && data.batteryCapacity < 100) {
     const capacity = data.batteryCapacity;
     const cycles = data.batteryCycles || 0;
     
-    if (capacity < 70 || cycles > 800) {
+    if (capacity < 70 || cycles > 1200) {
       flags.push({
         severity: 'CRITICAL',
         category: 'Battery',
+        clientFacing: `Battery: ${cycles} cycles (${capacity}% capacity) - replacement recommended`,
         issue: `Battery Health: ${capacity}% capacity, ${cycles} cycles`,
         recommendation: 'Battery replacement recommended',
         upsell: 'Battery replacement ($249)',
-        value: 249,
-        urgency: 'Address within 2-3 weeks to prevent unexpected shutdowns'
+        value: 249
       });
       priorityScore += 3;
       totalOpportunity += 249;
-    } else if (capacity < 85 || cycles > 500) {
+    } else if (capacity < 85 || cycles > 800) {
       flags.push({
         severity: 'MODERATE',
         category: 'Battery',
+        clientFacing: `Battery: ${cycles} cycles (${capacity}% capacity) - typical wear for age`,
         issue: `Battery Health: ${capacity}% capacity, ${cycles} cycles`,
         recommendation: 'Battery showing wear - monitor closely',
         upsell: 'Battery replacement ($249)',
-        value: 249,
-        urgency: 'Address within 1-2 months to maintain productivity'
+        value: 249
       });
       priorityScore += 2;
       totalOpportunity += 249;
@@ -58,26 +92,25 @@ function analyzeScanResults(data) {
       flags.push({
         severity: 'CRITICAL',
         category: 'Data Protection',
+        clientFacing: 'No backup detected - data at risk',
         issue: 'No backup detected - data at risk',
         recommendation: 'Immediate backup solution required',
         upsell: 'Backup setup service ($149)',
-        value: 149,
-        urgency: 'Address immediately - one hardware failure away from total data loss'
+        value: 149
       });
       priorityScore += 3;
       totalOpportunity += 149;
     } else if (backup !== 'Unknown') {
-      // Try to parse date and check if old
       const daysOld = calculateDaysSinceBackup(backup);
       if (daysOld > 30) {
         flags.push({
           severity: 'MODERATE',
           category: 'Data Protection',
+          clientFacing: `Last backup: ${daysOld} days ago`,
           issue: `Last backup: ${daysOld} days ago`,
           recommendation: 'Backup schedule needs attention',
           upsell: 'Backup setup service ($149)',
-          value: 149,
-          urgency: 'Address within 1-2 weeks to ensure data protection'
+          value: 149
         });
         priorityScore += 2;
         totalOpportunity += 149;
@@ -85,34 +118,35 @@ function analyzeScanResults(data) {
     }
   }
 
-  // Firewall Check
+  // === SECURITY (LOWER PRIORITY) ===
+  // Firewall Check - important but not as critical as hardware
   if (data.firewallEnabled === false) {
     flags.push({
-      severity: 'CRITICAL',
+      severity: 'MODERATE',  // Downgraded from CRITICAL
       category: 'Security',
+      clientFacing: 'Firewall disabled - security vulnerability',
       issue: 'Firewall is DISABLED',
-      recommendation: 'Enable firewall and perform security audit',
-      upsell: 'Security audit ($149)',
-      value: 149,
-      urgency: 'Address within 3-5 days - system exposed to network threats'
+      recommendation: 'Enable firewall for network protection',
+      upsell: 'Security audit ($99)',  // Lower price
+      value: 99
     });
-    priorityScore += 2;
-    totalOpportunity += 149;
+    priorityScore += 1;  // Reduced from 2
+    totalOpportunity += 99;
   }
 
   // FileVault Check
   if (data.fileVaultEnabled === false) {
     flags.push({
-      severity: 'MODERATE',
+      severity: 'INFO',  // Downgraded from MODERATE
       category: 'Security',
+      clientFacing: 'Disk encryption is OFF',
       issue: 'FileVault (disk encryption) is OFF',
-      recommendation: 'Enable FileVault for data protection',
-      upsell: 'Security audit ($149)',
-      value: 149,
-      urgency: 'Address within 2-3 weeks - data vulnerable if device is lost/stolen'
+      recommendation: 'Consider enabling FileVault for data protection',
+      upsell: 'Security setup ($79)',
+      value: 79
     });
-    priorityScore += 1;
-    totalOpportunity += 149;
+    priorityScore += 0;  // No priority bump for this
+    totalOpportunity += 79;
   }
 
   // Storage Check
@@ -122,24 +156,78 @@ function analyzeScanResults(data) {
       flags.push({
         severity: 'CRITICAL',
         category: 'Storage',
+        clientFacing: `Storage ${freePercent}% available - performance severely degraded`,
         issue: `Storage critically low: ${freePercent}% free`,
         recommendation: 'Immediate storage upgrade or cleanup required',
         upsell: 'Storage upgrade consultation',
-        value: 0,
-        urgency: 'Address within 24-48 hours - system performance severely degraded'
+        value: 0
       });
       priorityScore += 3;
     } else if (freePercent < 20) {
       flags.push({
         severity: 'MODERATE',
         category: 'Storage',
+        clientFacing: `Storage ${freePercent}% available - recommend cleanup`,
         issue: `Storage running low: ${freePercent}% free`,
         recommendation: 'Storage upgrade recommended soon',
         upsell: 'Storage upgrade consultation',
-        value: 0,
-        urgency: 'Address within 2-4 weeks to prevent performance issues'
+        value: 0
       });
       priorityScore += 2;
+    } else if (freePercent >= 50) {
+      // Good storage - mention it positively
+      flags.push({
+        severity: 'POSITIVE',
+        category: 'Storage',
+        clientFacing: `Storage: ${freePercent}% available - good breathing room`,
+        issue: 'Storage healthy',
+        recommendation: 'No action needed',
+        upsell: null,
+        value: 0
+      });
+    }
+  }
+
+  // === HARDWARE PRIORITY #3: MEMORY (RAM) ===
+  // RAM is critical for performance and AI workloads
+  if (data.totalRAM) {
+    const ram = data.totalRAM;
+    const pressure = data.memoryPressure || 'Normal';
+    
+    if (ram <= 8) {
+      flags.push({
+        severity: 'CRITICAL',
+        category: 'Memory',
+        clientFacing: `${ram}GB RAM - insufficient for modern workloads`,
+        issue: `Only ${ram}GB RAM - major bottleneck`,
+        recommendation: 'RAM upgrade critical for performance',
+        upsell: 'RAM upgrade ($${ram <= 4 ? '200-400' : '150-300'})`,
+        value: ram <= 4 ? 300 : 200
+      });
+      priorityScore += 3;  // HIGH PRIORITY
+      totalOpportunity += (ram <= 4 ? 300 : 200);
+    } else if (ram < 16 && pressure !== 'Normal') {
+      flags.push({
+        severity: 'MODERATE',
+        category: 'Memory',
+        clientFacing: `${ram}GB RAM with ${pressure.toLowerCase()} memory pressure`,
+        issue: `${ram}GB RAM under pressure`,
+        recommendation: 'RAM upgrade recommended for smooth performance',
+        upsell: 'RAM upgrade ($150-250)',
+        value: 200
+      });
+      priorityScore += 2;
+      totalOpportunity += 200;
+    } else if (ram >= 16 && pressure === 'Normal') {
+      flags.push({
+        severity: 'POSITIVE',
+        category: 'Memory',
+        clientFacing: `Memory: ${ram}GB - good for most tasks`,
+        issue: 'Memory adequate',
+        recommendation: 'No action needed',
+        upsell: null,
+        value: 0
+      });
     }
   }
 
@@ -148,47 +236,127 @@ function analyzeScanResults(data) {
     flags.push({
       severity: 'MODERATE',
       category: 'Performance',
+      clientFacing: `${data.loginItemsCount} apps starting at boot - slowing startup`,
       issue: `${data.loginItemsCount} apps starting at boot`,
       recommendation: 'Performance optimization needed',
       upsell: 'Performance optimization service ($129)',
-      value: 129,
-      urgency: 'Address at your convenience to improve boot times'
+      value: 129
     });
     priorityScore += 1;
     totalOpportunity += 129;
   }
 
-  // Memory Pressure Check
-  if (data.memoryPressure && data.memoryPressure !== 'Normal') {
-    flags.push({
-      severity: 'MODERATE',
-      category: 'Performance',
-      issue: `Memory pressure: ${data.memoryPressure}`,
-      recommendation: 'RAM upgrade or memory optimization',
-      upsell: 'Performance consultation',
-      value: 0,
-      urgency: 'Address within 3-4 weeks if experiencing slowdowns'
-    });
-    priorityScore += 1;
+  // CPU/Architecture Assessment (for AI readiness)
+  if (data.architecture && data.cpuBrand) {
+    const isIntel = data.architecture.toLowerCase().includes('x86') || data.architecture.toLowerCase().includes('intel');
+    const isOldIntel = isIntel && (data.cpuBrand.includes('2015') || data.cpuBrand.includes('2016') || data.cpuBrand.includes('2014'));
+    
+    if (isOldIntel) {
+      flags.push({
+        severity: 'CRITICAL',
+        category: 'Hardware',
+        clientFacing: `Intel CPU (${data.cpuBrand.includes('2015') ? '2015' : 'older'}) - approaching end of software support`,
+        issue: 'Old Intel CPU approaching end of life',
+        recommendation: 'Replacement recommended for AI workloads',
+        upsell: 'Upgrade consultation',
+        value: 0
+      });
+      priorityScore += 2;
+    }
   }
 
-  // Calculate priority level
+  // Software Update Check
+  if (data.softwareUpdateStatus && data.softwareUpdateStatus !== 'Up to date' && data.softwareUpdateStatus !== 'Unknown') {
+    const updateCount = parseInt(data.softwareUpdateStatus) || 0;
+    if (updateCount > 0) {
+      flags.push({
+        severity: 'MODERATE',
+        category: 'Software',
+        clientFacing: `${data.softwareUpdateStatus} pending`,
+        issue: `${data.softwareUpdateStatus} pending`,
+        recommendation: 'Install available updates for security and performance',
+        upsell: 'System maintenance service ($129)',
+        value: 129
+      });
+      priorityScore += 1;
+      totalOpportunity += 129;
+    }
+  }
+
+  // WiFi Signal Check
+  if (data.wifiSignalStrength && (data.wifiSignalStrength === 'Weak' || data.wifiSignalStrength === 'Fair')) {
+    flags.push({
+      severity: 'MODERATE',
+      category: 'Network',
+      clientFacing: `WiFi signal: ${data.wifiSignalStrength} - may impact performance`,
+      issue: `WiFi signal strength: ${data.wifiSignalStrength}`,
+      recommendation: 'Network optimization or router upgrade recommended',
+      upsell: 'Network assessment ($99)',
+      value: 99
+    });
+    priorityScore += 1;
+    totalOpportunity += 99;
+  }
+
+  // RAM Speed Check (for older Intel Macs)
+  if (data.ramSpeed && data.ramSpeed > 0 && data.ramSpeed < 2400) {
+    const isIntel = data.architecture && (data.architecture.toLowerCase().includes('x86') || data.architecture.toLowerCase().includes('intel'));
+    if (isIntel) {
+      flags.push({
+        severity: 'MODERATE',
+        category: 'Performance',
+        clientFacing: `RAM speed: ${data.ramSpeed}MHz - slower than modern standards`,
+        issue: `RAM Speed: ${data.ramSpeed}MHz (slow)`,
+        recommendation: 'RAM upgrade for faster performance',
+        upsell: 'RAM upgrade consultation',
+        value: 0
+      });
+      priorityScore += 1;
+    }
+  }
+
+  // External Monitor Assessment (positive note)
+  if (data.externalMonitors && data.externalMonitors > 0) {
+    flags.push({
+      severity: 'POSITIVE',
+      category: 'Display',
+      clientFacing: `Using ${data.externalMonitors} external monitor${data.externalMonitors > 1 ? 's' : ''} - good productivity setup`,
+      issue: 'External monitors detected',
+      recommendation: 'No action needed',
+      upsell: null,
+      value: 0
+    });
+  }
+
+  // Calculate priority level and system health
   const criticalCount = flags.filter(f => f.severity === 'CRITICAL').length;
   const moderateCount = flags.filter(f => f.severity === 'MODERATE').length;
+  const positiveCount = flags.filter(f => f.severity === 'POSITIVE').length;
   
   let priorityLevel = 'COLD';
-  if (criticalCount >= 2 || priorityScore >= 7) {
+  let systemHealth = 'GOOD';
+  
+  if (criticalCount >= 3 || priorityScore >= 8) {
     priorityLevel = 'HOT';
+    systemHealth = 'CRITICAL';
+  } else if (criticalCount >= 2 || priorityScore >= 6) {
+    priorityLevel = 'WARM';
+    systemHealth = 'NEEDS_ATTENTION';
   } else if (criticalCount >= 1 || priorityScore >= 4) {
     priorityLevel = 'WARM';
+    systemHealth = 'MODERATE';
+  } else if (positiveCount >= 2 && moderateCount <= 1) {
+    systemHealth = 'EXCELLENT';
   }
 
   return {
     flags,
     priorityScore,
     priorityLevel,
+    systemHealth,
     criticalCount,
     moderateCount,
+    positiveCount,
     totalOpportunity,
     flagCount: flags.length
   };
@@ -206,27 +374,93 @@ function calculateDaysSinceBackup(backupDate) {
   }
 }
 
-// ========== EMAIL GENERATION ==========
+function extractYear(macModel) {
+  // Extract year from model identifiers like "MacBookPro11,3" or from cpuBrand
+  const yearMatch = macModel.match(/20\d{2}/);
+  if (yearMatch) {
+    return parseInt(yearMatch[0]);
+  }
+  
+  // Fallback: try to infer from model number
+  if (macModel.includes('MacBookPro11') || macModel.includes('MacBookAir7')) return 2014;
+  if (macModel.includes('MacBookPro12') || macModel.includes('MacBookAir7')) return 2015;
+  if (macModel.includes('MacBookPro13') || macModel.includes('MacBookAir8')) return 2016;
+  
+  return null;
+}
+
+// ========== HONEST TIMELINE GENERATION ==========
+
+function generateTimeline(analysis, data) {
+  const { systemHealth, criticalCount } = analysis;
+  
+  switch (systemHealth) {
+    case 'EXCELLENT':
+      return {
+        assessment: 'Your Mac is in excellent shape and should serve you well for 2-3+ years.',
+        proTip: 'Regular maintenance (battery calibration, storage optimization, security updates) can extend your Mac\'s productive life even further. We offer quarterly tune-ups to keep you ahead of issues - reply if you\'d like details.'
+      };
+      
+    case 'GOOD':
+      return {
+        assessment: 'Your Mac is in good condition and should serve you well for 1-2+ years with attention to the items noted above.',
+        proTip: 'Regular maintenance can extend your system\'s lifespan and prevent small issues from becoming expensive problems. We offer quarterly check-ups - reply to learn more.'
+      };
+      
+    case 'MODERATE':
+      return {
+        assessment: 'Address the noted items within 2-3 months to prevent workflow disruption.',
+        proTip: 'Acting now preserves your options and avoids emergency situations. We can help you prioritize which fixes deliver the most value first - reply to discuss your best path forward.'
+      };
+      
+    case 'NEEDS_ATTENTION':
+      return {
+        assessment: 'Address the critical items within 4-6 weeks to maintain productivity.',
+        proTip: 'These issues will worsen over time. We can help you create a cost-effective action plan that addresses the most urgent items first - reply to explore your options.'
+      };
+      
+    case 'CRITICAL':
+      return {
+        assessment: 'Immediate attention recommended. Plan upgrade or replacement within 4-6 weeks.',
+        proTip: 'Waiting risks data loss and forced last-minute decisions. We can help you evaluate whether targeted upgrades or replacement makes more sense for your situation - reply to explore your options.'
+      };
+      
+    default:
+      return {
+        assessment: 'Your system assessment is complete.',
+        proTip: 'We\'re here if you have questions about optimizing your Mac\'s performance.'
+      };
+  }
+}
+
+// ========== CLIENT EMAIL GENERATION ==========
 
 function generateClientEmail(data, analysis) {
-  const { clientEmail, aiPreparednessTier, macModel, totalRAM, storageType } = data;
-  const { flagCount, criticalCount, priorityLevel } = analysis;
+  const { clientEmail, aiPreparednessTier, macModel, totalRAM, storageType, cpuBrand } = data;
+  const { flags, systemHealth } = analysis;
 
-  // Determine urgency message based on actual issues
-  let urgencySection = '';
-  const criticalFlags = analysis.flags.filter(f => f.severity === 'CRITICAL');
+  // Get top 3 real issues (not positive notes)
+  const issues = flags.filter(f => f.severity !== 'POSITIVE').slice(0, 3);
+  const additionalIssues = flags.filter(f => f.severity !== 'POSITIVE').length - 3;
   
-  if (criticalFlags.length > 0) {
-    const urgencies = criticalFlags.map(f => f.urgency).filter(u => u);
-    if (urgencies.length > 0) {
-      urgencySection = `
-        <div style="background: #fff3cd; border-left: 4px solid #cc6600; padding: 15px; margin: 20px 0;">
-          <strong>⚠️ Attention Required:</strong>
-          <p style="margin: 10px 0 0 0;">${urgencies[0]}</p>
-        </div>
-      `;
+  let issuesList = '';
+  if (issues.length > 0) {
+    issues.forEach(flag => {
+      issuesList += `<li style="margin: 8px 0;">${flag.clientFacing}</li>`;
+    });
+    
+    if (additionalIssues > 0) {
+      issuesList += `<li style="margin: 8px 0; font-style: italic;">...and ${additionalIssues} other area${additionalIssues === 1 ? '' : 's'} we can discuss</li>`;
     }
+  } else {
+    // No issues - show positive notes
+    const positives = flags.filter(f => f.severity === 'POSITIVE').slice(0, 3);
+    positives.forEach(flag => {
+      issuesList += `<li style="margin: 8px 0;">${flag.clientFacing}</li>`;
+    });
   }
+
+  const timeline = generateTimeline(analysis, data);
 
   const html = `
 <!DOCTYPE html>
@@ -238,25 +472,23 @@ function generateClientEmail(data, analysis) {
 <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
   
   <div style="text-align: center; padding: 20px 0; border-bottom: 2px solid #5b7db1;">
-    <h1 style="color: #5b7db1; margin: 0;">Dr.WinMac's AI & System Check-Up</h1>
-    <p style="color: #666; margin: 5px 0 0 0;">Your System Health Report</p>
+    <h1 style="color: #5b7db1; margin: 0;">Velocity Strip-Search</h1>
+    <p style="color: #666; margin: 5px 0 0 0;">Your Mac System Analysis</p>
   </div>
 
   <div style="padding: 30px 0;">
-    <p>Hi there,</p>
-    
-    <p>Thank you for using our free Mac diagnostic tool! Your system scan is complete.</p>
+    <p>Thank you for using Velocity Strip-Search.</p>
 
     <div style="background: #f8f9fa; border-radius: 8px; padding: 20px; margin: 20px 0;">
-      <h3 style="margin-top: 0; color: #5b7db1;">Quick Summary</h3>
+      <h3 style="margin-top: 0; color: #5b7db1;">System Overview</h3>
       <table style="width: 100%; border-collapse: collapse;">
-        <tr>
-          <td style="padding: 8px 0;"><strong>AI Readiness:</strong></td>
-          <td style="padding: 8px 0;">${aiPreparednessTier || 'Ready'}</td>
-        </tr>
         <tr>
           <td style="padding: 8px 0;"><strong>Mac Model:</strong></td>
           <td style="padding: 8px 0;">${macModel || 'Unknown'}</td>
+        </tr>
+        <tr>
+          <td style="padding: 8px 0;"><strong>Processor:</strong></td>
+          <td style="padding: 8px 0;">${cpuBrand || 'Unknown'}</td>
         </tr>
         <tr>
           <td style="padding: 8px 0;"><strong>Memory:</strong></td>
@@ -266,28 +498,29 @@ function generateClientEmail(data, analysis) {
           <td style="padding: 8px 0;"><strong>Storage:</strong></td>
           <td style="padding: 8px 0;">${storageType || 'Unknown'}</td>
         </tr>
+        <tr>
+          <td style="padding: 8px 0;"><strong>AI Readiness:</strong></td>
+          <td style="padding: 8px 0;">${aiPreparednessTier || 'Assessment Complete'}</td>
+        </tr>
       </table>
     </div>
 
-    ${urgencySection}
-
     <div style="background: #e8f4f8; border-radius: 8px; padding: 20px; margin: 20px 0;">
-      <h3 style="margin-top: 0; color: #5b7db1;">Optimization Opportunities</h3>
-      <p>Our analysis identified <strong>${flagCount} area${flagCount !== 1 ? 's' : ''}</strong> where your Mac could benefit from attention${criticalCount > 0 ? `, including ${criticalCount} that ${criticalCount === 1 ? 'requires' : 'require'} prompt action` : ''}.</p>
-      
-      <p style="margin: 20px 0;">As a thank you for using our diagnostic tool, I'd like to extend a special offer:</p>
-      
-      <div style="background: white; border: 2px solid #cc6600; border-radius: 8px; padding: 20px; margin: 20px 0;">
-        <p style="margin: 0 0 10px 0;"><strong>🎁 Complimentary Consultation Offer</strong></p>
-        <p style="margin: 0;">Reply to this email within the next week for a <strong>free 15-minute consultation</strong> (normally $99) where we'll walk through your specific optimization opportunities and create a personalized action plan.</p>
-      </div>
+      <h3 style="margin-top: 0; color: #5b7db1;">AI Readiness Assessment</h3>
+      ${issuesList ? `<ul style="margin: 10px 0; padding-left: 20px;">${issuesList}</ul>` : '<p>Your system is in good condition overall.</p>'}
+    </div>
+
+    <div style="background: #fff3cd; border-left: 4px solid #cc6600; padding: 15px; margin: 20px 0;">
+      <h4 style="margin: 0 0 10px 0; color: #cc6600;">Timeline</h4>
+      <p style="margin: 0 0 15px 0;">${timeline.assessment}</p>
+      <p style="margin: 0;"><strong>Pro tip:</strong> ${timeline.proTip}</p>
     </div>
 
     <div style="text-align: center; margin: 30px 0;">
       <a href="https://www.drwinmac.tech/services.html" style="display: inline-block; background: #cc6600; color: white; padding: 15px 30px; text-decoration: none; border-radius: 6px; font-weight: bold;">View Our Services</a>
     </div>
 
-    <p>Looking forward to helping you get the most out of your Mac!</p>
+    <p>Questions? Just reply to this email.</p>
     
     <p>Best regards,<br>
     <strong>Jeremy</strong><br>
@@ -307,9 +540,11 @@ function generateClientEmail(data, analysis) {
   return html;
 }
 
+// ========== INTERNAL EMAIL (unchanged from before) ==========
+
 function generateInternalEmail(data, analysis) {
   const { clientEmail } = data;
-  const { flags, priorityScore, priorityLevel, criticalCount, moderateCount, totalOpportunity } = analysis;
+  const { flags, priorityScore, priorityLevel, criticalCount, moderateCount, totalOpportunity, systemHealth } = analysis;
 
   const criticalFlags = flags.filter(f => f.severity === 'CRITICAL');
   const moderateFlags = flags.filter(f => f.severity === 'MODERATE');
@@ -336,7 +571,6 @@ function generateInternalEmail(data, analysis) {
     flagsList += '</ul>';
   }
 
-  // Generate call script dynamically based on flags
   let callScriptHook = 'Your scan results look great overall';
   if (criticalFlags.length > 0) {
     const topFlag = criticalFlags[0];
@@ -345,6 +579,8 @@ function generateInternalEmail(data, analysis) {
     const topFlag = moderateFlags[0];
     callScriptHook = `I saw ${topFlag.issue.toLowerCase()}. This is something we can help optimize. Have you noticed any performance concerns?`;
   }
+
+  const timeline = generateTimeline(analysis, data);
 
   const html = `
 <!DOCTYPE html>
@@ -360,6 +596,7 @@ function generateInternalEmail(data, analysis) {
     <p style="font-size: 18px; margin: 10px 0;"><strong>${clientEmail}</strong></p>
     <p style="margin: 5px 0;">Scan Date: ${new Date().toLocaleString()}</p>
     <p style="margin: 5px 0;">Mac: ${data.macModel || 'Unknown'} | Tier: ${data.aiPreparednessTier || 'Unknown'}</p>
+    <p style="margin: 5px 0;">System Health: <strong>${systemHealth}</strong></p>
   </div>
 
   <div style="background: ${priorityLevel === 'HOT' ? '#d32f2f' : priorityLevel === 'WARM' ? '#f57c00' : '#666'}; color: white; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
@@ -367,19 +604,25 @@ function generateInternalEmail(data, analysis) {
   </div>
 
   <div style="background: #fff; border-radius: 8px; padding: 20px; margin-bottom: 20px;">
-    ${flagsList}
+    ${flagsList || '<p>No critical issues detected - system in good health.</p>'}
     
     ${totalOpportunity > 0 ? `
     <div style="background: #e8f5e9; border-left: 4px solid #4caf50; padding: 15px; margin-top: 20px;">
       <h3 style="margin: 0 0 10px 0; color: #2e7d32;">💰 TOTAL SERVICE OPPORTUNITY: $${totalOpportunity}+</h3>
     </div>
     ` : ''}
+    
+    <div style="background: #e3f2fd; border-left: 4px solid #2196f3; padding: 15px; margin-top: 20px;">
+      <h4 style="margin: 0 0 5px 0;">TIMELINE GIVEN TO CLIENT:</h4>
+      <p style="margin: 5px 0;">${timeline.assessment}</p>
+      <p style="margin: 5px 0; font-style: italic;">"Pro tip: ${timeline.proTip}"</p>
+    </div>
   </div>
 
   <div style="background: #fff3cd; border: 2px solid #ffc107; border-radius: 8px; padding: 20px; margin-bottom: 20px;">
     <h2 style="margin-top: 0; color: #f57c00;">📞 QUICK CALL SCRIPT</h2>
     
-    <p><strong>OPEN:</strong> "Hi there, this is [Your Name] from Dr.WinMac following up on the system scan you ran."</p>
+    <p><strong>OPEN:</strong> "Hi there, this is [Your Name] from Dr.WinMac following up on the Velocity Strip-Search scan you ran."</p>
     
     <p><strong>HOOK:</strong> "${callScriptHook}"</p>
     
@@ -415,21 +658,27 @@ function generateInternalEmail(data, analysis) {
       <li>Last Backup: ${data.lastBackupDate || 'Unknown'}</li>
       <li>Firewall: ${data.firewallEnabled ? 'ON' : 'OFF'}</li>
       <li>FileVault: ${data.fileVaultEnabled ? 'ON' : 'OFF'}</li>
+      <li>SIP (System Integrity Protection): ${data.sipEnabled ? 'ON' : 'OFF'}</li>
+      <li>Software Updates: ${data.softwareUpdateStatus || 'Unknown'}</li>
       <li>Login Items: ${data.loginItemsCount || 0} apps</li>
       <li>Memory Pressure: ${data.memoryPressure || 'Unknown'}</li>
+      <li>RAM Speed: ${data.ramSpeed || 0} MHz</li>
       <li>Network: ${data.networkType || 'Unknown'}</li>
+      <li>WiFi Signal: ${data.wifiSignalStrength || 'Unknown'}</li>
+      <li>Display: ${data.displayResolution || 'Unknown'}</li>
+      <li>External Monitors: ${data.externalMonitors || 0}</li>
+      <li>CPU Temperature: ${data.cpuTemperature || 0}°C${data.cpuTemperature > 0 ? '' : ' (unavailable)'}</li>
     </ul>
 
     <h3>AI PREPAREDNESS:</h3>
     <ul>
       <li>Tier: ${data.aiPreparednessTier || 'Unknown'}</li>
-      <li>Explanation: ${data.aiPreparednessExplanation || 'N/A'}</li>
+      <li>System Health: ${systemHealth}</li>
     </ul>
   </div>
 
   <div style="background: #e3f2fd; border-radius: 8px; padding: 20px; margin-top: 20px; text-align: center;">
     <a href="mailto:${clientEmail}" style="display: inline-block; background: #5b7db1; color: white; padding: 15px 30px; text-decoration: none; border-radius: 6px; font-weight: bold; margin: 10px;">📧 Reply to Lead</a>
-    <a href="https://calendly.com/drwinmac" style="display: inline-block; background: #cc6600; color: white; padding: 15px 30px; text-decoration: none; border-radius: 6px; font-weight: bold; margin: 10px;">📅 Schedule Call</a>
   </div>
 
 </body>
@@ -455,6 +704,7 @@ app.post('/scan-results', async (req, res) => {
     const analysis = analyzeScanResults(data);
 
     console.log(`📊 New scan from ${clientEmail} - Priority: ${analysis.priorityLevel} (${analysis.priorityScore}/10)`);
+    console.log(`System Health: ${analysis.systemHealth}`);
     console.log(`Flags: ${analysis.criticalCount} critical, ${analysis.moderateCount} moderate`);
 
     // Generate emails
@@ -463,17 +713,17 @@ app.post('/scan-results', async (req, res) => {
 
     // Send email to CLIENT
     const clientEmailResponse = await resend.emails.send({
-      from: 'Dr.WinMac <noreply@drwinmac.tech>',
+      from: 'Velocity Strip-Search <scanner@drwinmac.tech>',
       to: clientEmail,
-      subject: '✅ Your Mac Health Report - Dr.WinMac',
+      subject: '✅ Your Mac Analysis Results',
       html: clientEmailHTML
     });
 
     // Send email to YOU (Jeremy)
     const internalEmailResponse = await resend.emails.send({
-      from: 'Dr.WinMac Leads <leads@drwinmac.tech>',
+      from: 'Velocity Leads <leads@drwinmac.tech>',
       to: 'Jeremy@drwinmac.tech',
-      subject: `🎯 ${analysis.priorityLevel} LEAD: ${clientEmail} - $${analysis.totalOpportunity}+ opportunity`,
+      subject: `🎯 ${analysis.priorityLevel} LEAD: ${clientEmail} - ${analysis.systemHealth} - $${analysis.totalOpportunity}+`,
       html: internalEmailHTML
     });
 
@@ -483,6 +733,7 @@ app.post('/scan-results', async (req, res) => {
       success: true,
       message: 'Scan results processed and emails sent',
       priority: analysis.priorityLevel,
+      systemHealth: analysis.systemHealth,
       flagCount: analysis.flagCount,
       clientEmailId: clientEmailResponse.data?.id,
       internalEmailId: internalEmailResponse.data?.id
@@ -499,18 +750,12 @@ app.post('/scan-results', async (req, res) => {
 
 // Health check
 app.get('/health', (req, res) => {
-  res.json({ status: 'ok', service: 'drwinmac-backend', version: '2.0' });
-});
-
-// Fallback for old endpoint
-app.post('/api/send-results', async (req, res) => {
-  res.status(301).json({ 
-    message: 'This endpoint has moved. Please use /scan-results instead.' 
-  });
+  res.json({ status: 'ok', service: 'velocity-strip-search', version: '2.0' });
 });
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log(`🚀 Dr.WinMac Backend running on port ${PORT}`);
+  console.log(`🚀 Velocity Strip-Search Backend running on port ${PORT}`);
   console.log(`📧 Email service: ${process.env.RESEND_API_KEY ? 'CONFIGURED' : 'MISSING API KEY'}`);
+  console.log(`💎 Trust > Sales - Honest assessments build real relationships`);
 });
