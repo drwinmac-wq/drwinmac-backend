@@ -433,34 +433,124 @@ function generateTimeline(analysis, data) {
   }
 }
 
+// ========== HELPER FUNCTIONS FOR CLIENT EMAIL ==========
+
+function getUrgencyTimeline(flag) {
+  if (flag.severity === 'CRITICAL') {
+    if (flag.category === 'Hardware Age') return 'Replace within 3-6 months';
+    if (flag.category === 'Battery') return 'Address within 2-4 weeks';
+    if (flag.category === 'Memory') return 'Upgrade within 1-2 months';
+    if (flag.category === 'Storage') return 'Address within 1-2 weeks';
+    if (flag.category === 'Data Protection') return 'Set up immediately';
+    return 'Address within 2-4 weeks';
+  }
+  if (flag.severity === 'MODERATE') {
+    if (flag.category === 'Battery') return 'Plan replacement within 6-12 months';
+    if (flag.category === 'Memory') return 'Consider upgrade within 3-6 months';
+    if (flag.category === 'Storage') return 'Clean up or upgrade within 1-2 months';
+    if (flag.category === 'Security') return 'Enable within 1 month';
+    return 'Address within 2-3 months';
+  }
+  return '';
+}
+
+function calculateSystemGrade(analysis, data) {
+  const { priorityScore, criticalCount, moderateCount } = analysis;
+  const { totalRAM } = data;
+  
+  let grade = 'B';
+  let color = '#4caf50';
+  let proTip = 'Your system is performing well. Regular maintenance will keep it running smoothly.';
+  
+  // Grading logic
+  if (priorityScore >= 12 || criticalCount >= 4) {
+    grade = 'D-';
+    color = '#c62828';
+    proTip = 'Critical: Multiple hardware failures imminent. Replacement strongly recommended.';
+  } else if (priorityScore >= 10 || criticalCount >= 3) {
+    grade = 'D+';
+    color = '#d32f2f';
+    proTip = 'Urgent: Your system needs immediate attention to prevent hardware failure and data loss.';
+  } else if (priorityScore >= 7 || criticalCount >= 2) {
+    grade = 'C-';
+    color = '#f57c00';
+    proTip = 'Address critical hardware issues within 4-8 weeks to maintain functionality.';
+  } else if (priorityScore >= 5 || criticalCount >= 1) {
+    grade = 'C+';
+    color = '#ffa726';
+    proTip = 'Your system has aging hardware. Plan upgrades within 6-12 months.';
+  } else if (priorityScore >= 3 || moderateCount >= 2) {
+    grade = 'B-';
+    color = '#66bb6a';
+    proTip = 'Minor improvements recommended. Your system is generally solid.';
+  } else if (priorityScore >= 1) {
+    grade = 'B+';
+    color = '#43a047';
+    proTip = 'Good system health. Stay on top of maintenance to keep it running well.';
+  } else if (totalRAM >= 16) {
+    grade = 'A';
+    color = '#2e7d32';
+    proTip = 'Excellent! Your system is well-equipped. Maintain regular backups and updates.';
+  }
+  
+  // A+ reserved for near-perfect systems
+  if (priorityScore === 0 && criticalCount === 0 && moderateCount === 0 && totalRAM >= 32) {
+    grade = 'A+';
+    color = '#1b5e20';
+    proTip = 'Outstanding system! Professional-grade hardware. Keep up your excellent maintenance habits.';
+  }
+  
+  return { letter: grade, color, proTip };
+}
+
 // ========== CLIENT EMAIL GENERATION ==========
 
 function generateClientEmail(data, analysis) {
-  const { clientEmail, aiPreparednessTier, macModel, totalRAM, storageType, cpuBrand } = data;
+  const { clientName, clientEmail, macModel, totalRAM, storageType, cpuBrand, totalStorage, freeStoragePercent } = data;
   const { flags, systemHealth } = analysis;
 
-  // Get top 3 real issues (not positive notes)
-  const issues = flags.filter(f => f.severity !== 'POSITIVE').slice(0, 3);
-  const additionalIssues = flags.filter(f => f.severity !== 'POSITIVE').length - 3;
+  // Separate hardware issues (CRITICAL/MODERATE) and service issues
+  const hardwareIssues = flags.filter(f => 
+    (f.severity === 'CRITICAL' || f.severity === 'MODERATE') && 
+    (f.category === 'Hardware Age' || f.category === 'Memory' || f.category === 'Battery' || f.category === 'Storage')
+  ).slice(0, 5);
   
-  let issuesList = '';
-  if (issues.length > 0) {
-    issues.forEach(flag => {
-      issuesList += `<li style="margin: 8px 0;">${flag.clientFacing}</li>`;
+  const serviceIssues = flags.filter(f => 
+    f.category === 'Data Protection' || f.category === 'Security' || f.category === 'Performance'
+  ).slice(0, 3);
+  
+  const additionalHardware = flags.filter(f => 
+    (f.severity === 'CRITICAL' || f.severity === 'MODERATE') && 
+    (f.category === 'Hardware Age' || f.category === 'Memory' || f.category === 'Battery' || f.category === 'Storage')
+  ).length - 5;
+
+  // Build hardware issues list with urgency
+  let hardwareList = '';
+  if (hardwareIssues.length > 0) {
+    hardwareIssues.forEach((flag, index) => {
+      const urgency = getUrgencyTimeline(flag);
+      hardwareList += `<li style="margin: 10px 0;"><strong>${flag.clientFacing}</strong>${urgency ? `<br><span style="color: #666; font-size: 14px;">Timeline: ${urgency}</span>` : ''}</li>`;
     });
-    
-    if (additionalIssues > 0) {
-      issuesList += `<li style="margin: 8px 0; font-style: italic;">...and ${additionalIssues} other area${additionalIssues === 1 ? '' : 's'} we can discuss</li>`;
+    if (additionalHardware > 0) {
+      hardwareList += `<li style="margin: 10px 0; font-style: italic; color: #666;">+ ${additionalHardware} additional hardware concern${additionalHardware === 1 ? '' : 's'} identified</li>`;
     }
   } else {
-    // No issues - show positive notes
-    const positives = flags.filter(f => f.severity === 'POSITIVE').slice(0, 3);
-    positives.forEach(flag => {
-      issuesList += `<li style="margin: 8px 0;">${flag.clientFacing}</li>`;
-    });
+    hardwareList = '<li style="margin: 10px 0;">No critical hardware issues detected</li>';
   }
 
-  const timeline = generateTimeline(analysis, data);
+  // Build service issues list
+  let serviceList = '';
+  if (serviceIssues.length > 0) {
+    serviceIssues.forEach((flag, index) => {
+      const urgency = getUrgencyTimeline(flag);
+      serviceList += `<li style="margin: 10px 0;"><strong>${flag.clientFacing}</strong>${urgency ? `<br><span style="color: #666; font-size: 14px;">Timeline: ${urgency}</span>` : ''}</li>`;
+    });
+  } else {
+    serviceList = '<li style="margin: 10px 0;">System maintenance up to date</li>';
+  }
+
+  // Calculate overall grade
+  const grade = calculateSystemGrade(analysis, data);
 
   const html = `
 <!DOCTYPE html>
@@ -473,14 +563,15 @@ function generateClientEmail(data, analysis) {
   
   <div style="text-align: center; padding: 20px 0; border-bottom: 2px solid #5b7db1;">
     <h1 style="color: #5b7db1; margin: 0;">Velocity Strip-Search</h1>
-    <p style="color: #666; margin: 5px 0 0 0;">Your Mac System Analysis</p>
+    <p style="color: #666; margin: 5px 0 0 0;">Hardware Analysis Report</p>
   </div>
 
   <div style="padding: 30px 0;">
-    <p>Thank you for using Velocity Strip-Search.</p>
+    <p>${clientName ? `Hi ${clientName},` : 'Hello,'}</p>
+    <p>Your comprehensive hardware scan is complete. Here's what we found:</p>
 
     <div style="background: #f8f9fa; border-radius: 8px; padding: 20px; margin: 20px 0;">
-      <h3 style="margin-top: 0; color: #5b7db1;">System Overview</h3>
+      <h3 style="margin-top: 0; color: #5b7db1;">Quick Summary</h3>
       <table style="width: 100%; border-collapse: collapse;">
         <tr>
           <td style="padding: 8px 0;"><strong>Mac Model:</strong></td>
@@ -491,36 +582,39 @@ function generateClientEmail(data, analysis) {
           <td style="padding: 8px 0;">${cpuBrand || 'Unknown'}</td>
         </tr>
         <tr>
-          <td style="padding: 8px 0;"><strong>Memory:</strong></td>
+          <td style="padding: 8px 0;"><strong>Memory (RAM):</strong></td>
           <td style="padding: 8px 0;">${totalRAM || 0} GB</td>
         </tr>
         <tr>
           <td style="padding: 8px 0;"><strong>Storage:</strong></td>
-          <td style="padding: 8px 0;">${storageType || 'Unknown'}</td>
+          <td style="padding: 8px 0;">${totalStorage || 0} GB ${storageType || ''} (${freeStoragePercent || 0}% free)</td>
         </tr>
         <tr>
-          <td style="padding: 8px 0;"><strong>AI Readiness:</strong></td>
-          <td style="padding: 8px 0;">${aiPreparednessTier || 'Assessment Complete'}</td>
+          <td style="padding: 8px 0;"><strong>Overall Grade:</strong></td>
+          <td style="padding: 8px 0; font-size: 18px;"><strong style="color: ${grade.color};">${grade.letter}</strong></td>
         </tr>
       </table>
     </div>
 
-    <div style="background: #e8f4f8; border-radius: 8px; padding: 20px; margin: 20px 0;">
-      <h3 style="margin-top: 0; color: #5b7db1;">AI Readiness Assessment</h3>
-      ${issuesList ? `<ul style="margin: 10px 0; padding-left: 20px;">${issuesList}</ul>` : '<p>Your system is in good condition overall.</p>'}
+    <div style="background: #fff3cd; border-left: 4px solid #cc6600; padding: 20px; margin: 20px 0;">
+      <h3 style="margin-top: 0; color: #cc6600;">⚠️ Attention Required - Hardware</h3>
+      <ul style="margin: 10px 0; padding-left: 20px;">${hardwareList}</ul>
     </div>
 
-    <div style="background: #fff3cd; border-left: 4px solid #cc6600; padding: 15px; margin: 20px 0;">
-      <h4 style="margin: 0 0 10px 0; color: #cc6600;">Timeline</h4>
-      <p style="margin: 0 0 15px 0;">${timeline.assessment}</p>
-      <p style="margin: 0;"><strong>Pro tip:</strong> ${timeline.proTip}</p>
+    <div style="background: #e8f4f8; border-radius: 8px; padding: 20px; margin: 20px 0;">
+      <h3 style="margin-top: 0; color: #5b7db1;">Optimization Opportunities - Services</h3>
+      <ul style="margin: 10px 0; padding-left: 20px;">${serviceList}</ul>
+    </div>
+
+    <div style="background: #f0f0f0; border-radius: 8px; padding: 15px; margin: 20px 0;">
+      <p style="margin: 0;"><strong>Pro tip:</strong> ${grade.proTip}</p>
     </div>
 
     <div style="text-align: center; margin: 30px 0;">
-      <a href="https://www.drwinmac.tech/services.html" style="display: inline-block; background: #cc6600; color: white; padding: 15px 30px; text-decoration: none; border-radius: 6px; font-weight: bold;">View Our Services</a>
+      <a href="https://www.drwinmac.tech/services.html" style="display: inline-block; background: #cc6600; color: white; padding: 15px 30px; text-decoration: none; border-radius: 6px; font-weight: bold;">Schedule Free Consultation</a>
     </div>
 
-    <p>Questions? Just reply to this email.</p>
+    <p>Questions about your results? Just reply to this email.</p>
     
     <p>Best regards,<br>
     <strong>Jeremy</strong><br>
@@ -543,7 +637,7 @@ function generateClientEmail(data, analysis) {
 // ========== INTERNAL EMAIL (unchanged from before) ==========
 
 function generateInternalEmail(data, analysis) {
-  const { clientEmail } = data;
+  const { clientName, clientEmail } = data;
   const { flags, priorityScore, priorityLevel, criticalCount, moderateCount, totalOpportunity, systemHealth } = analysis;
 
   const criticalFlags = flags.filter(f => f.severity === 'CRITICAL');
@@ -593,6 +687,7 @@ function generateInternalEmail(data, analysis) {
   
   <div style="background: #fff; border: 2px solid #5b7db1; border-radius: 8px; padding: 20px; margin-bottom: 20px;">
     <h1 style="margin: 0; color: #5b7db1;">🎯 NEW LEAD CAPTURED</h1>
+    <p style="font-size: 18px; margin: 10px 0;"><strong>${clientName || 'Name not provided'}</strong></p>
     <p style="font-size: 18px; margin: 10px 0;"><strong>${clientEmail}</strong></p>
     <p style="margin: 5px 0;">Scan Date: ${new Date().toLocaleString()}</p>
     <p style="margin: 5px 0;">Mac: ${data.macModel || 'Unknown'} | Tier: ${data.aiPreparednessTier || 'Unknown'}</p>
