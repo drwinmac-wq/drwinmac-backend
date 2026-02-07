@@ -363,10 +363,14 @@ function analyzeScanResults(data) {
     totalOpportunity += 99;
   }
 
-  // RAM Speed Check (for older Intel Macs)
+  // RAM Speed Check (for older Intel Macs) - ONLY if RAM is NOT soldered
   if (data.ramSpeed && data.ramSpeed > 0 && data.ramSpeed < 2400) {
     const isIntel = data.architecture && (data.architecture.toLowerCase().includes('x86') || data.architecture.toLowerCase().includes('intel'));
-    if (isIntel) {
+    const modelYear = extractYear(data.macModel || '');
+    const isSoldered = modelYear && modelYear <= 2015 && (data.macModel.includes('MacBookPro11') || data.macModel.includes('MacBookAir'));
+    
+    // Only flag if Intel AND RAM is NOT soldered (upgradeable)
+    if (isIntel && !isSoldered) {
       flags.push({
         severity: 'MODERATE',
         category: 'Performance',
@@ -504,7 +508,13 @@ function getUrgencyTimeline(flag) {
   if (flag.severity === 'CRITICAL') {
     if (flag.category === 'Hardware Age') return 'Replace within 3-6 months';
     if (flag.category === 'Battery') return 'Address within 2-4 weeks';
-    if (flag.category === 'Memory') return 'Upgrade within 1-2 months';
+    // Check if it's soldered RAM - don't suggest upgrade, suggest replacement
+    if (flag.category === 'Memory') {
+      if (flag.clientFacing.includes('soldered') || flag.clientFacing.includes('Cannot be upgraded')) {
+        return 'System replacement needed for more RAM';
+      }
+      return 'Upgrade within 1-2 months';
+    }
     if (flag.category === 'Storage') return 'Address within 1-2 weeks';
     if (flag.category === 'Data Protection') return 'Set up immediately';
     return 'Address within 2-4 weeks';
@@ -667,7 +677,7 @@ function generateClientEmail(data, analysis) {
           <div><strong>Last Backup:</strong> ${data.lastBackupDate ? new Date(data.lastBackupDate).toLocaleDateString() : 'Never'}</div>
           <div><strong>Firewall:</strong> ${data.firewallEnabled ? 'ON' : 'OFF'}</div>
           <div><strong>Disk Encryption:</strong> ${data.fileVaultEnabled ? 'ON' : 'OFF'}</div>
-          <div><strong>Software Updates:</strong> ${data.softwareUpdateStatus || 'Unknown'}</div>
+          <div><strong>Software Updates:</strong> ${data.softwareUpdateStatus === 'Check manually' ? 'Updates needed' : data.softwareUpdateStatus || 'Unknown'}</div>
           <div><strong>Memory Pressure:</strong> ${data.memoryPressure || 'Unknown'}</div>
         </div>
       </div>
