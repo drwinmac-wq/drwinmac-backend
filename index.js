@@ -24,21 +24,61 @@ function analyzeScanResults(data) {
 
   // === HARDWARE PRIORITY #1: OLD SYSTEM ===
   // Check for old Intel Macs (2015 and earlier) - HIGHEST PRIORITY
+  // For old systems, we detail ALL the aging components
   if (data.macModel && data.cpuBrand) {
     const modelYear = extractYear(data.macModel);
     const isOldIntel = modelYear && modelYear <= 2015;
     
     if (isOldIntel) {
+      // MAIN SYSTEM AGE FLAG
       flags.push({
         severity: 'CRITICAL',
         category: 'Hardware Age',
-        clientFacing: `${modelYear} Mac - Limited lifespan for modern software`,
-        issue: `System from ${modelYear} - nearing end of practical life`,
-        recommendation: 'Replacement or major upgrade recommended',
-        upsell: 'New Mac consultation or targeted upgrades',
+        clientFacing: `${modelYear} Mac - System approaching end of practical life`,
+        issue: `System from ${modelYear} - multiple aging components`,
+        recommendation: 'Replacement strongly recommended',
+        upsell: 'New Mac consultation',
         value: 0
       });
-      priorityScore += 4; // HIGHEST PRIORITY
+      priorityScore += 4;
+      
+      // DETAILED COMPONENT FLAGS for old systems
+      flags.push({
+        severity: 'CRITICAL',
+        category: 'Hardware Age',
+        clientFacing: `Processor: ${data.cpuBrand?.substring(0, 30) || 'Intel Core'} - ${modelYear} generation CPU lacks modern instruction sets`,
+        issue: `CPU from ${modelYear} - no support for modern AI/ML frameworks`,
+        recommendation: 'Replacement required for AI workloads',
+        upsell: null,
+        value: 0
+      });
+      priorityScore += 2;
+      
+      flags.push({
+        severity: 'CRITICAL',
+        category: 'Hardware Age',
+        clientFacing: `GPU: Integrated Intel graphics - Insufficient for AI processing`,
+        issue: 'Integrated GPU from 2014-2015 generation',
+        recommendation: 'External GPU or system replacement',
+        upsell: null,
+        value: 0
+      });
+      priorityScore += 2;
+      
+      // Note about soldered RAM for MacBookPro11,x models
+      if (data.macModel.includes('MacBookPro11') || data.macModel.includes('MacBookAir')) {
+        flags.push({
+          severity: 'CRITICAL',
+          category: 'Memory',
+          clientFacing: `RAM: ${data.totalRAM}GB (soldered) - Cannot be upgraded on this model`,
+          issue: `RAM soldered to logic board - upgrade impossible`,
+          recommendation: 'System replacement required for more RAM',
+          upsell: 'New Mac consultation',
+          value: 0
+        });
+        priorityScore += 2;
+      }
+      
     } else if (modelYear && modelYear <= 2017) {
       flags.push({
         severity: 'MODERATE',
@@ -190,11 +230,15 @@ function analyzeScanResults(data) {
 
   // === HARDWARE PRIORITY #3: MEMORY (RAM) ===
   // RAM is critical for performance and AI workloads
+  // Skip if already flagged as soldered in old system section
   if (data.totalRAM) {
     const ram = data.totalRAM;
     const pressure = data.memoryPressure || 'Normal';
+    const modelYear = extractYear(data.macModel || '');
+    const isSoldered = modelYear && modelYear <= 2015 && (data.macModel.includes('MacBookPro11') || data.macModel.includes('MacBookAir'));
     
-    if (ram <= 8) {
+    if (ram <= 8 && !isSoldered) {
+      // Only flag RAM as upgradeable if it's NOT soldered
       flags.push({
         severity: 'CRITICAL',
         category: 'Memory',
@@ -206,7 +250,7 @@ function analyzeScanResults(data) {
       });
       priorityScore += 3;  // HIGH PRIORITY
       totalOpportunity += (ram <= 4 ? 300 : 200);
-    } else if (ram < 16 && pressure !== 'Normal') {
+    } else if (ram < 16 && pressure !== 'Normal' && !isSoldered) {
       flags.push({
         severity: 'MODERATE',
         category: 'Memory',
@@ -567,7 +611,7 @@ function generateClientEmail(data, analysis) {
   </div>
 
   <div style="padding: 30px 0;">
-    <p>${clientName ? `Hi ${clientName},` : 'Hello,'}</p>
+    <p>${clientName ? `Hi ${clientName.charAt(0).toUpperCase() + clientName.slice(1)},` : 'Hello,'}</p>
     <p>Your comprehensive hardware scan is complete. Here's what we found:</p>
 
     <div style="background: #f8f9fa; border-radius: 8px; padding: 20px; margin: 20px 0;">
@@ -590,7 +634,7 @@ function generateClientEmail(data, analysis) {
           <td style="padding: 8px 0;">${totalStorage || 0} GB ${storageType || ''} (${freeStoragePercent || 0}% free)</td>
         </tr>
         <tr>
-          <td style="padding: 8px 0;"><strong>Overall Grade:</strong></td>
+          <td style="padding: 8px 0;"><strong>Overall AI Preparedness Grade:</strong></td>
           <td style="padding: 8px 0; font-size: 18px;"><strong style="color: ${grade.color};">${grade.letter}</strong></td>
         </tr>
       </table>
