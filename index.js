@@ -290,6 +290,27 @@ function analyzeScanResults(data) {
     totalOpportunity += 129;
   }
 
+  // Software Update Check - Service Opportunity
+  if (data.softwareUpdateStatus === 'Check manually') {
+    flags.push({
+      severity: 'MODERATE',
+      category: 'Maintenance',
+      clientFacing: 'Software updates not configured for automatic installation',
+      issue: 'Manual update configuration - likely outdated system',
+      recommendation: 'Enable automatic updates and install pending updates',
+      upsell: 'System update & optimization service ($149)',
+      value: 149
+    });
+    priorityScore += 1;
+    totalOpportunity += 149;
+  }
+
+  // Add replacement consultation value for old systems
+  const modelYear = extractYear(data.macModel || '');
+  if (modelYear && modelYear <= 2015) {
+    totalOpportunity += 150;  // Consultation fee for replacement guidance
+  }
+
   // CPU/Architecture Assessment (for AI readiness)
   if (data.architecture && data.cpuBrand) {
     const isIntel = data.architecture.toLowerCase().includes('x86') || data.architecture.toLowerCase().includes('intel');
@@ -506,42 +527,42 @@ function calculateSystemGrade(analysis, data) {
   let color = '#4caf50';
   let proTip = 'Your system is performing well. Regular maintenance will keep it running smoothly.';
   
-  // Grading logic
+  // Grading logic with HONEST, GROUNDED pro tips
   if (priorityScore >= 12 || criticalCount >= 4) {
     grade = 'D-';
     color = '#c62828';
-    proTip = 'Critical: Multiple hardware failures imminent. Replacement strongly recommended.';
+    proTip = 'Your Mac has reached the point where replacement makes more financial sense than continued repairs. Modern software requirements are outpacing what this hardware can deliver.';
   } else if (priorityScore >= 10 || criticalCount >= 3) {
     grade = 'D+';
     color = '#d32f2f';
-    proTip = 'Urgent: Your system needs immediate attention to prevent hardware failure and data loss.';
+    proTip = 'This system is nearing the end of its practical lifespan. Budget for replacement within 3-6 months to avoid being forced into a last-minute decision.';
   } else if (priorityScore >= 7 || criticalCount >= 2) {
     grade = 'C-';
     color = '#f57c00';
-    proTip = 'Address critical hardware issues within 4-8 weeks to maintain functionality.';
+    proTip = 'Multiple hardware limitations are affecting your productivity. Address the critical items first, but start planning for eventual replacement.';
   } else if (priorityScore >= 5 || criticalCount >= 1) {
     grade = 'C+';
     color = '#ffa726';
-    proTip = 'Your system has aging hardware. Plan upgrades within 6-12 months.';
+    proTip = 'Your system will continue working for everyday tasks, but upgrading or replacing within 6-12 months will prevent workflow disruptions.';
   } else if (priorityScore >= 3 || moderateCount >= 2) {
     grade = 'B-';
     color = '#66bb6a';
-    proTip = 'Minor improvements recommended. Your system is generally solid.';
+    proTip = 'A few minor improvements will extend your system\'s useful life. Addressing these proactively is cheaper than waiting for problems.';
   } else if (priorityScore >= 1) {
     grade = 'B+';
     color = '#43a047';
-    proTip = 'Good system health. Stay on top of maintenance to keep it running well.';
+    proTip = 'Solid system overall. Regular backups and maintenance will keep you running smoothly for years.';
   } else if (totalRAM >= 16) {
     grade = 'A';
     color = '#2e7d32';
-    proTip = 'Excellent! Your system is well-equipped. Maintain regular backups and updates.';
+    proTip = 'Excellent hardware configuration. Focus on data protection and you\'re set for the long haul.';
   }
   
   // A+ reserved for near-perfect systems
   if (priorityScore === 0 && criticalCount === 0 && moderateCount === 0 && totalRAM >= 32) {
     grade = 'A+';
     color = '#1b5e20';
-    proTip = 'Outstanding system! Professional-grade hardware. Keep up your excellent maintenance habits.';
+    proTip = 'Outstanding system with professional-grade specs. Maintain your current backup and security practices.';
   }
   
   return { letter: grade, color, proTip };
@@ -638,6 +659,18 @@ function generateClientEmail(data, analysis) {
           <td style="padding: 8px 0; font-size: 18px;"><strong style="color: ${grade.color};">${grade.letter}</strong></td>
         </tr>
       </table>
+      
+      <div style="margin-top: 15px; padding-top: 15px; border-top: 1px solid #ddd;">
+        <h4 style="margin: 0 0 10px 0; color: #5b7db1; font-size: 14px;">Key Health Metrics:</h4>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 13px;">
+          <div><strong>Battery:</strong> ${data.batteryCapacity || 0}% (${data.batteryCycles || 0} cycles)</div>
+          <div><strong>Last Backup:</strong> ${data.lastBackupDate ? new Date(data.lastBackupDate).toLocaleDateString() : 'Never'}</div>
+          <div><strong>Firewall:</strong> ${data.firewallEnabled ? 'ON' : 'OFF'}</div>
+          <div><strong>Disk Encryption:</strong> ${data.fileVaultEnabled ? 'ON' : 'OFF'}</div>
+          <div><strong>Software Updates:</strong> ${data.softwareUpdateStatus || 'Unknown'}</div>
+          <div><strong>Memory Pressure:</strong> ${data.memoryPressure || 'Unknown'}</div>
+        </div>
+      </div>
     </div>
 
     <div style="background: #fff3cd; border-left: 4px solid #cc6600; padding: 20px; margin: 20px 0;">
@@ -758,27 +791,7 @@ function generateInternalEmail(data, analysis) {
     </div>
   </div>
 
-  <div style="background: #fff3cd; border: 2px solid #ffc107; border-radius: 8px; padding: 20px; margin-bottom: 20px;">
-    <h2 style="margin-top: 0; color: #f57c00;">📞 QUICK CALL SCRIPT</h2>
-    
-    <p><strong>OPEN:</strong> "Hi there, this is [Your Name] from Dr.WinMac following up on the Velocity Strip-Search scan you ran."</p>
-    
-    <p><strong>HOOK:</strong> "${callScriptHook}"</p>
-    
-    <p><strong>QUALIFY:</strong> "Is this Mac primarily for business or personal use?" → [Listen for pain points]</p>
-    
-    <p><strong>CLOSE:</strong> "Let me get you on Jeremy's calendar. I have [Day1] at [Time1] or [Day2] at [Time2] - which works better?"</p>
-    
-    <h3 style="color: #d32f2f;">OBJECTION HANDLING:</h3>
-    <ul>
-      <li><strong>"Too expensive"</strong> → "Most clients save 2+ hours/week after optimization. What's your time worth?"</li>
-      <li><strong>"I'll do it myself"</strong> → "Totally respect that! Want our DIY guide? We're here if you get stuck."</li>
-      <li><strong>"Need to think"</strong> → "Of course! What specific questions can I answer to help you decide?"</li>
-      <li><strong>"Just had Apple look"</strong> → "Great! We specialize in optimization Apple doesn't cover. Did they mention [specific flag]?"</li>
-    </ul>
-  </div>
-
-  <div style="background: #fff; border-radius: 8px; padding: 20px;">
+  <div style="background: #fff; border-radius: 8px; padding: 20px; margin-bottom: 20px;">
     <h2 style="border-bottom: 2px solid #5b7db1; padding-bottom: 10px;">📊 FULL DIAGNOSTIC DUMP</h2>
     
     <h3>SYSTEM INFO:</h3>
@@ -794,7 +807,7 @@ function generateInternalEmail(data, analysis) {
     <h3>HEALTH METRICS:</h3>
     <ul>
       <li>Battery: ${data.batteryCapacity || 100}% capacity, ${data.batteryCycles || 0} cycles (${data.batteryCondition || 'N/A'})</li>
-      <li>Last Backup: ${data.lastBackupDate || 'Unknown'}</li>
+      <li>Last Backup: ${data.lastBackupDate || 'Never'}</li>
       <li>Firewall: ${data.firewallEnabled ? 'ON' : 'OFF'}</li>
       <li>FileVault: ${data.fileVaultEnabled ? 'ON' : 'OFF'}</li>
       <li>SIP (System Integrity Protection): ${data.sipEnabled ? 'ON' : 'OFF'}</li>
@@ -814,6 +827,74 @@ function generateInternalEmail(data, analysis) {
       <li>Tier: ${data.aiPreparednessTier || 'Unknown'}</li>
       <li>System Health: ${systemHealth}</li>
     </ul>
+  </div>
+
+  <div style="background: #fff3cd; border: 2px solid #ffc107; border-radius: 8px; padding: 20px; margin-bottom: 20px;">
+    <h2 style="margin-top: 0; color: #f57c00;">📞 SALES CALL SCRIPT</h2>
+    
+    <h3 style="color: #5b7db1; margin-top: 0;">PRE-CALL PREP:</h3>
+    <ul style="margin-bottom: 20px;">
+      <li><strong>Review flagged issues above</strong> - Know the top 2-3 pain points</li>
+      <li><strong>Check their grade:</strong> ${systemHealth} system</li>
+      <li><strong>Total opportunity:</strong> $${totalOpportunity} in services</li>
+      <li><strong>Decision timeline:</strong> ${criticalCount >= 2 ? 'URGENT - 2-4 weeks' : moderateCount >= 2 ? 'Soon - 1-2 months' : 'Planning - 3-6 months'}</li>
+    </ul>
+    
+    <h3 style="color: #5b7db1;">OPENING (First 30 seconds):</h3>
+    <p><strong>YOU:</strong> "Hi ${clientName || '[Name]'}, this is [Your Name] from Dr.WinMac. You ran our Velocity Strip-Search scan on your ${data.macModel || 'Mac'} - do you have a couple minutes to go over what we found?"</p>
+    <p style="font-size: 12px; color: #666;"><em>[Wait for confirmation. If busy: "No problem, when's a better time? I have the results in front of me."]</em></p>
+    
+    <h3 style="color: #5b7db1;">HOOK (Lead with their top issue):</h3>
+    <p><strong>YOU:</strong> "${callScriptHook}"</p>
+    <p style="font-size: 12px; color: #666;"><em>[Pause. Let them respond. Listen for frustration, workflow impacts, or urgency.]</em></p>
+    
+    <h3 style="color: #5b7db1;">QUALIFY (Understand their world):</h3>
+    <p><strong>YOU:</strong> "Quick question - is this Mac primarily for work, personal use, or both?"</p>
+    <p style="font-size: 12px; color: #666;"><em>[If work: "What kind of work?" / If personal: "What do you mainly use it for?"]</em></p>
+    <p><strong>FOLLOW-UP:</strong> "On a scale of 1-10, how much is [issue from hook] slowing you down day-to-day?"</p>
+    <p style="font-size: 12px; color: #666;"><em>[Listen for 7+: that's real pain. Under 5: deprioritize.]</em></p>
+    
+    <h3 style="color: #5b7db1;">PRESENT SOLUTION:</h3>
+    <p><strong>YOU:</strong> "Based on what you're telling me, here's what I'd recommend..."</p>
+    <ul style="margin-top: 10px;">
+      <li><strong>If ${systemHealth === 'CRITICAL' || systemHealth === 'NEEDS_ATTENTION' ? 'critical issues' : 'multiple flags'}:</strong> "Let's get you on Jeremy's calendar for a free 15-minute consult. He'll walk through your options - whether that's targeted upgrades or budgeting for replacement."</li>
+      <li><strong>If service opportunity:</strong> "We can handle [backup setup / security hardening / performance tuning] same-week. Usually takes 45 min - 1 hour remotely."</li>
+      <li><strong>If just needs education:</strong> "I can send you our maintenance checklist. If you get stuck on any of it, we're a phone call away."</li>
+    </ul>
+    
+    <h3 style="color: #5b7db1;">CLOSE (Assume the sale):</h3>
+    <p><strong>YOU:</strong> "I'm looking at Jeremy's calendar - I have [Day] at [Time] or [Day] at [Time]. Which works better for you?"</p>
+    <p style="font-size: 12px; color: #666;"><em>[If they hesitate: "No pressure - what questions can I answer to help you decide?"]</em></p>
+    
+    <h3 style="color: #d32f2f; margin-top: 20px;">OBJECTION HANDLING:</h3>
+    <table style="width: 100%; border-collapse: collapse;">
+      <tr style="border-bottom: 1px solid #ddd;">
+        <td style="padding: 8px; font-weight: bold; width: 200px;">"Too expensive"</td>
+        <td style="padding: 8px;">"I hear you. Most clients tell us they save 2-3 hours/week after we optimize their setup. What's your time worth per hour? Let's do the math together."</td>
+      </tr>
+      <tr style="border-bottom: 1px solid #ddd;">
+        <td style="padding: 8px; font-weight: bold;">"I'll do it myself"</td>
+        <td style="padding: 8px;">"Totally respect that! Want me to email you our step-by-step guide? If you hit any snags, we're here. No judgment."</td>
+      </tr>
+      <tr style="border-bottom: 1px solid #ddd;">
+        <td style="padding: 8px; font-weight: bold;">"Need to think about it"</td>
+        <td style="padding: 8px;">"Of course. What specific part are you mulling over - the cost, the timing, or something else? Let me address that for you."</td>
+      </tr>
+      <tr style="border-bottom: 1px solid #ddd;">
+        <td style="padding: 8px; font-weight: bold;">"Just had Apple look at it"</td>
+        <td style="padding: 8px;">"Great! What did they recommend? [Listen] We specialize in the stuff Apple doesn't cover - like ${criticalFlags.length > 0 ? criticalFlags[0].clientFacing : 'backup optimization and performance tuning'}. Did they mention that?"</td>
+      </tr>
+      <tr style="border-bottom: 1px solid #ddd;">
+        <td style="padding: 8px; font-weight: bold;">"It's working fine for me"</td>
+        <td style="padding: 8px;">"That's good to hear! The scan flagged a few things that could cause problems down the road - mainly ${criticalFlags.length > 0 ? criticalFlags[0].clientFacing.toLowerCase() : 'preventative stuff'}. Want me to send you a heads-up timeline so you can plan ahead?"</td>
+      </tr>
+      <tr>
+        <td style="padding: 8px; font-weight: bold;">"Can I just buy a new Mac?"</td>
+        <td style="padding: 8px;">"Absolutely! That's one of the options Jeremy helps people evaluate. He'll show you what you'd need to spend new vs. what targeted upgrades would cost. Usually saves people $500-1000 if we can extend what you have."</td>
+      </tr>
+    </table>
+    
+    <p style="margin-top: 20px; padding: 15px; background: #fff; border-left: 4px solid #5b7db1;"><strong>KEY PRINCIPLE:</strong> You're a consultant, not a salesperson. Your job is to help them make an informed decision - even if that decision is "do nothing." Trust builds repeat business.</p>
   </div>
 
   <div style="background: #e3f2fd; border-radius: 8px; padding: 20px; margin-top: 20px; text-align: center;">
