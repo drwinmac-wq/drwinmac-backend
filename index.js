@@ -201,7 +201,7 @@ function analyzeScanResults(data) {
         clientFacing: `${ram}GB RAM - insufficient for modern workloads`,
         issue: `Only ${ram}GB RAM - major bottleneck`,
         recommendation: 'RAM upgrade critical for performance',
-        upsell: 'RAM upgrade ($${ram <= 4 ? '200-400' : '150-300'})`,
+        upsell: `RAM upgrade ($${ram <= 4 ? '200-400' : '150-300'})`,
         value: ram <= 4 ? 300 : 200
       });
       priorityScore += 3;  // HIGH PRIORITY
