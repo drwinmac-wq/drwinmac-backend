@@ -524,7 +524,28 @@ function getUrgencyTimeline(flag) {
     if (flag.category === 'Memory') return 'Consider upgrade within 3-6 months';
     if (flag.category === 'Storage') return 'Clean up or upgrade within 1-2 months';
     if (flag.category === 'Security') return 'Enable within 1 month';
+    if (flag.category === 'Maintenance') return 'Address within 2-4 weeks';
     return 'Address within 2-3 months';
+  }
+  return '';
+}
+
+function getConsequence(flag) {
+  // Add real-world consequences for service issues
+  if (flag.clientFacing.includes('No backup') || flag.clientFacing.includes('backup')) {
+    return 'If your drive fails, you lose everything';
+  }
+  if (flag.clientFacing.includes('encryption') || flag.clientFacing.includes('FileVault')) {
+    return 'If laptop is lost/stolen, your files are readable';
+  }
+  if (flag.clientFacing.includes('Firewall')) {
+    return 'Vulnerable to network attacks';
+  }
+  if (flag.clientFacing.includes('Software updates') || flag.clientFacing.includes('updates')) {
+    return 'Missing critical security patches';
+  }
+  if (flag.clientFacing.includes('Login items') || flag.clientFacing.includes('startup')) {
+    return 'Wasting 2-5 minutes every boot';
   }
   return '';
 }
@@ -582,46 +603,72 @@ function calculateSystemGrade(analysis, data) {
 
 function generateClientEmail(data, analysis) {
   const { clientName, clientEmail, macModel, totalRAM, storageType, cpuBrand, totalStorage, freeStoragePercent } = data;
-  const { flags, systemHealth } = analysis;
+  const { flags, systemHealth, criticalCount, moderateCount } = analysis;
 
-  // Separate hardware issues (CRITICAL/MODERATE) and service issues
+  // Separate ALL hardware and service issues - NO CAPS
   const hardwareIssues = flags.filter(f => 
     (f.severity === 'CRITICAL' || f.severity === 'MODERATE') && 
     (f.category === 'Hardware Age' || f.category === 'Memory' || f.category === 'Battery' || f.category === 'Storage')
-  ).slice(0, 5);
+  );
   
   const serviceIssues = flags.filter(f => 
-    f.category === 'Data Protection' || f.category === 'Security' || f.category === 'Performance'
-  ).slice(0, 3);
+    f.category === 'Data Protection' || f.category === 'Security' || f.category === 'Performance' || f.category === 'Maintenance'
+  );
   
-  const additionalHardware = flags.filter(f => 
-    (f.severity === 'CRITICAL' || f.severity === 'MODERATE') && 
-    (f.category === 'Hardware Age' || f.category === 'Memory' || f.category === 'Battery' || f.category === 'Storage')
-  ).length - 5;
+  // Separate by severity for priority tiers
+  const criticalHardware = hardwareIssues.filter(f => f.severity === 'CRITICAL');
+  const moderateHardware = hardwareIssues.filter(f => f.severity === 'MODERATE');
+  const criticalServices = serviceIssues.filter(f => f.severity === 'CRITICAL');
+  const moderateServices = serviceIssues.filter(f => f.severity === 'MODERATE');
 
-  // Build hardware issues list with urgency
+  // Build hardware issues list - ORGANIZED BY PRIORITY
   let hardwareList = '';
   if (hardwareIssues.length > 0) {
-    hardwareIssues.forEach((flag, index) => {
-      const urgency = getUrgencyTimeline(flag);
-      hardwareList += `<li style="margin: 10px 0;"><strong>${flag.clientFacing}</strong>${urgency ? `<br><span style="color: #666; font-size: 14px;">Timeline: ${urgency}</span>` : ''}</li>`;
-    });
-    if (additionalHardware > 0) {
-      hardwareList += `<li style="margin: 10px 0; font-style: italic; color: #666;">+ ${additionalHardware} additional hardware concern${additionalHardware === 1 ? '' : 's'} identified</li>`;
+    if (criticalHardware.length > 0) {
+      hardwareList += `<p style="margin: 15px 0 5px 0; font-weight: bold; color: #d32f2f;">🔴 CRITICAL - Needs Attention Now (${criticalHardware.length}):</p><ul style="margin: 5px 0; padding-left: 20px;">`;
+      criticalHardware.forEach((flag) => {
+        const urgency = getUrgencyTimeline(flag);
+        hardwareList += `<li style="margin: 8px 0;"><strong>${flag.clientFacing}</strong>${urgency ? `<br><span style="color: #666; font-size: 14px;">⏱ Timeline: ${urgency}</span>` : ''}</li>`;
+      });
+      hardwareList += `</ul>`;
+    }
+    
+    if (moderateHardware.length > 0) {
+      hardwareList += `<p style="margin: 15px 0 5px 0; font-weight: bold; color: #f57c00;">🟡 MODERATE - Plan Ahead (${moderateHardware.length}):</p><ul style="margin: 5px 0; padding-left: 20px;">`;
+      moderateHardware.forEach((flag) => {
+        const urgency = getUrgencyTimeline(flag);
+        hardwareList += `<li style="margin: 8px 0;"><strong>${flag.clientFacing}</strong>${urgency ? `<br><span style="color: #666; font-size: 14px;">⏱ Timeline: ${urgency}</span>` : ''}</li>`;
+      });
+      hardwareList += `</ul>`;
     }
   } else {
-    hardwareList = '<li style="margin: 10px 0;">No critical hardware issues detected</li>';
+    hardwareList = '<p style="color: #4caf50;">✅ No critical hardware issues detected</p>';
   }
 
-  // Build service issues list
+  // Build service issues list - ORGANIZED BY PRIORITY
   let serviceList = '';
   if (serviceIssues.length > 0) {
-    serviceIssues.forEach((flag, index) => {
-      const urgency = getUrgencyTimeline(flag);
-      serviceList += `<li style="margin: 10px 0;"><strong>${flag.clientFacing}</strong>${urgency ? `<br><span style="color: #666; font-size: 14px;">Timeline: ${urgency}</span>` : ''}</li>`;
-    });
+    if (criticalServices.length > 0) {
+      serviceList += `<p style="margin: 15px 0 5px 0; font-weight: bold; color: #d32f2f;">🔴 CRITICAL - Address Immediately (${criticalServices.length}):</p><ul style="margin: 5px 0; padding-left: 20px;">`;
+      criticalServices.forEach((flag) => {
+        const urgency = getUrgencyTimeline(flag);
+        const consequence = getConsequence(flag);
+        serviceList += `<li style="margin: 8px 0;"><strong>${flag.clientFacing}</strong>${consequence ? `<br><span style="color: #c62828; font-size: 13px;">⚠️ Risk: ${consequence}</span>` : ''}${urgency ? `<br><span style="color: #666; font-size: 14px;">⏱ Timeline: ${urgency}</span>` : ''}</li>`;
+      });
+      serviceList += `</ul>`;
+    }
+    
+    if (moderateServices.length > 0) {
+      serviceList += `<p style="margin: 15px 0 5px 0; font-weight: bold; color: #f57c00;">🟡 MODERATE - Recommended (${moderateServices.length}):</p><ul style="margin: 5px 0; padding-left: 20px;">`;
+      moderateServices.forEach((flag) => {
+        const urgency = getUrgencyTimeline(flag);
+        const consequence = getConsequence(flag);
+        serviceList += `<li style="margin: 8px 0;"><strong>${flag.clientFacing}</strong>${consequence ? `<br><span style="color: #e65100; font-size: 13px;">⚠️ Risk: ${consequence}</span>` : ''}${urgency ? `<br><span style="color: #666; font-size: 14px;">⏱ Timeline: ${urgency}</span>` : ''}</li>`;
+      });
+      serviceList += `</ul>`;
+    }
   } else {
-    serviceList = '<li style="margin: 10px 0;">System maintenance up to date</li>';
+    serviceList = '<p style="color: #4caf50;">✅ System maintenance up to date</p>';
   }
 
   // Calculate overall grade
@@ -684,29 +731,68 @@ function generateClientEmail(data, analysis) {
     </div>
 
     <div style="background: #fff3cd; border-left: 4px solid #cc6600; padding: 20px; margin: 20px 0;">
-      <h3 style="margin-top: 0; color: #cc6600;">⚠️ Attention Required - Hardware</h3>
-      <ul style="margin: 10px 0; padding-left: 20px;">${hardwareList}</ul>
+      <h3 style="margin-top: 0; color: #cc6600;">⚠️ Complete Hardware Diagnostic</h3>
+      <p style="margin: 0 0 15px 0; color: #666; font-size: 14px;">This is your full hardware report - everything we found, organized by urgency. When we talk, I'll help you prioritize which items to tackle first based on your budget and timeline.</p>
+      ${hardwareList}
     </div>
 
     <div style="background: #e8f4f8; border-radius: 8px; padding: 20px; margin: 20px 0;">
-      <h3 style="margin-top: 0; color: #5b7db1;">Optimization Opportunities - Services</h3>
-      <ul style="margin: 10px 0; padding-left: 20px;">${serviceList}</ul>
+      <h3 style="margin-top: 0; color: #5b7db1;">System Maintenance & Security</h3>
+      <p style="margin: 0 0 15px 0; color: #666; font-size: 14px;">These are software-side items that can be addressed relatively quickly. Each includes the real-world risk if left unaddressed.</p>
+      ${serviceList}
     </div>
 
     <div style="background: #f0f0f0; border-radius: 8px; padding: 15px; margin: 20px 0;">
       <p style="margin: 0;"><strong>Pro tip:</strong> ${grade.proTip}</p>
     </div>
 
-    <div style="text-align: center; margin: 30px 0;">
-      <a href="https://www.drwinmac.tech/services.html" style="display: inline-block; background: #cc6600; color: white; padding: 15px 30px; text-decoration: none; border-radius: 6px; font-weight: bold;">Schedule Free Consultation</a>
+    <div style="background: #fff8e1; border-left: 4px solid #f57c00; padding: 20px; margin: 20px 0;">
+      <h3 style="margin-top: 0; color: #f57c00;">📌 What This Means For Your Day-to-Day</h3>
+      <p style="margin: 10px 0;">Based on your ${data.platform === 'windows' ? 'PC' : 'Mac'}'s hardware age and limitations, here's what you're experiencing (or will soon):</p>
+      <ul style="margin: 10px 0; padding-left: 20px;">
+        <li><strong>Slower performance</strong> - Your ${data.cpuBrand ? data.cpuBrand.substring(0, 40) : 'processor'} and ${data.totalRAM}GB RAM can't keep up with modern software demands</li>
+        <li><strong>Software compatibility issues</strong> - Many apps now require newer processors and more memory than your system can provide</li>
+        ${data.batteryCapacity ? `<li><strong>Short battery life</strong> - At ${data.batteryCycles || 0} cycles and ${data.batteryCapacity}% capacity, you're running on borrowed time</li>` : ''}
+        ${hardwareIssues.some(f => f.clientFacing.includes('soldered')) ? '<li><strong>Limited upgrade path</strong> - With soldered components and aging hardware, there\'s no way to extend this system\'s life through upgrades</li>' : ''}
+        <li><strong>Resale value declining fast</strong> - Systems this old typically hit the "recycle vs resell" threshold around 10-12 years</li>
+      </ul>
+      <p style="margin: 10px 0;"><strong>The good news?</strong> You're catching this before an emergency forces your hand. That gives you time to plan.</p>
     </div>
 
-    <p>Questions about your results? Just reply to this email.</p>
-    
-    <p>Best regards,<br>
-    <strong>Jeremy</strong><br>
-    Dr.WinMac<br>
-    <a href="mailto:Jeremy@drwinmac.tech">Jeremy@drwinmac.tech</a></p>
+    <div style="background: #e3f2fd; border: 2px solid #5b7db1; border-radius: 8px; padding: 25px; margin: 30px 0;">
+      <h3 style="margin-top: 0; color: #5b7db1;">📞 What Happens Next</h3>
+      <p style="margin: 10px 0;">This scan identified ${criticalCount} critical hardware issue${criticalCount === 1 ? '' : 's'} and ${moderateCount} optimization opportunit${moderateCount === 1 ? 'y' : 'ies'}. The diagnostic is complete - now let's discuss your options.</p>
+      
+      <p style="margin: 15px 0;"><strong>In a quick 15-minute call, I'll help you:</strong></p>
+      <ol style="margin: 10px 0; padding-left: 20px;">
+        <li style="margin: 8px 0;"><strong>Understand your timeline</strong> - Based on your system's age and condition, when do you realistically need to make a move?</li>
+        <li style="margin: 8px 0;"><strong>Evaluate your options</strong> - New ${data.platform === 'windows' ? 'PC' : 'Mac'}? Refurbished? Targeted repairs? What makes sense for your budget and workflow?</li>
+        <li style="margin: 8px 0;"><strong>Plan your transition</strong> - If replacement is the answer, how do you migrate data, what specs do you actually need, and when should you pull the trigger?</li>
+        <li style="margin: 8px 0;"><strong>Avoid costly mistakes</strong> - Most people overspend on specs they don't need, or wait too long and lose data. Let's avoid both.</li>
+      </ol>
+
+      <div style="text-align: center; margin: 25px 0;">
+        <a href="https://calendly.com/drwinmac" style="display: inline-block; background: #5b7db1; color: white; padding: 15px 40px; text-decoration: none; border-radius: 6px; font-weight: bold; font-size: 16px;">📅 BOOK YOUR 15-MINUTE STRATEGY CALL</a>
+      </div>
+
+      <p style="margin: 15px 0; padding: 15px; background: #fff3cd; border-left: 4px solid #ffc107; font-size: 14px;"><strong>⏰ Limited Availability:</strong> I work solo (by choice), so I limit consultations to 3 per week to give each client proper attention.</p>
+
+      <p style="margin: 10px 0;">Based on your system's condition and the timeline flags above, you have roughly <strong>3-6 months</strong> before decisions start getting forced on you. Book now while you have time to plan.</p>
+      
+      <p style="margin: 10px 0; font-size: 13px; color: #666;">Not ready yet? That's fine - just know that waiting too long usually costs more (emergency purchases, lost data, rushed decisions).</p>
+    </div>
+
+    <div style="background: #f5f5f5; border-radius: 8px; padding: 20px; margin: 20px 0;">
+      <h3 style="margin-top: 0; color: #333;">Why Dr.WinMac?</h3>
+      <p style="margin: 10px 0;">I've been working with PCs and Macs since 1999 - started during the Y2K transition helping businesses navigate hardware upgrades and system migrations. 25+ years across both platforms.</p>
+      <p style="margin: 10px 0;">My focus is simple: <strong>hardware diagnostics, upgrade planning, and helping you avoid expensive mistakes.</strong> I don't sell computers, don't get vendor commissions, and I don't push services you don't need.</p>
+      <p style="margin: 10px 0;">Whether you're running Windows or macOS, this scan gives you the full picture before making any decisions.</p>
+      <p style="margin: 15px 0 5px 0;">- Jeremy<br>
+      Dr.WinMac<br>
+      <a href="mailto:Jeremy@drwinmac.tech" style="color: #5b7db1;">Jeremy@drwinmac.tech</a></p>
+    </div>
+
+    <p style="font-size: 13px; color: #666; margin-top: 30px;">Questions about your results? Just reply to this email.</p>
   </div>
 
   <div style="border-top: 2px solid #eee; padding-top: 20px; margin-top: 30px; text-align: center; color: #999; font-size: 12px;">
@@ -798,6 +884,37 @@ function generateInternalEmail(data, analysis) {
       <h4 style="margin: 0 0 5px 0;">TIMELINE GIVEN TO CLIENT:</h4>
       <p style="margin: 5px 0;">${timeline.assessment}</p>
       <p style="margin: 5px 0; font-style: italic;">"Pro tip: ${timeline.proTip}"</p>
+    </div>
+  </div>
+
+  <div style="background: #d4edda; border: 3px solid #28a745; border-radius: 8px; padding: 25px; margin-bottom: 20px;">
+    <h2 style="margin-top: 0; color: #155724;">🎯 PRIORITY ACTION GUIDE - YOUR CALL CHEAT SHEET</h2>
+    <p style="margin: 10px 0; font-size: 15px;"><strong>When they call overwhelmed, scroll to this section and say:</strong></p>
+    <p style="margin: 10px 0; padding: 15px; background: #fff; border-left: 4px solid #28a745; font-style: italic;">"I know that's a lot to take in. Let me break down what actually needs attention RIGHT NOW vs. what can wait..."</p>
+    
+    <h3 style="color: #155724; margin-top: 20px;">IMMEDIATE PRIORITIES (Next 2-4 Weeks):</h3>
+    <ul style="margin: 10px 0;">
+      ${criticalFlags.slice(0, 3).map(f => `<li style="margin: 8px 0;"><strong>${f.issue}</strong> - ${f.recommendation}</li>`).join('')}
+    </ul>
+    
+    ${criticalCount > 3 ? `<p style="margin: 10px 0; color: #666;"><em>+ ${criticalCount - 3} more critical items (see full list below)</em></p>` : ''}
+    
+    <h3 style="color: #856404; margin-top: 20px;">CAN WAIT (Next 1-3 Months):</h3>
+    <ul style="margin: 10px 0;">
+      ${moderateFlags.slice(0, 3).map(f => `<li style="margin: 8px 0;">${f.issue} - ${f.recommendation}</li>`).join('')}
+    </ul>
+    
+    ${moderateCount > 3 ? `<p style="margin: 10px 0; color: #666;"><em>+ ${moderateCount - 3} more moderate items</em></p>` : ''}
+    
+    <div style="background: #fff; padding: 15px; margin-top: 20px; border-left: 4px solid #007bff;">
+      <h4 style="margin-top: 0; color: #007bff;">YOUR OPENING LINE:</h4>
+      <p style="margin: 5px 0; font-size: 15px;">"Looking at your ${data.macModel || 'system'}, here's what I'd recommend tackling first: <strong>${criticalFlags[0] ? criticalFlags[0].issue : 'the critical items'}</strong>. The rest can wait until ${moderateCount > 0 ? '[business picks up / after the holidays / next quarter]' : 'later'}."</p>
+    </div>
+    
+    <div style="background: #fff; padding: 15px; margin-top: 15px; border-left: 4px solid #6c757d;">
+      <h4 style="margin-top: 0; color: #6c757d;">EXPECTED BUDGET RANGE:</h4>
+      <p style="margin: 5px 0;">Total opportunity: <strong>$${totalOpportunity}</strong></p>
+      <p style="margin: 5px 0; font-size: 14px; color: #666;">But realistically, if ${systemHealth === 'CRITICAL' ? 'system replacement' : 'targeted fixes'}: ${systemHealth === 'CRITICAL' ? '$1,200-2,000' : '$' + Math.min(totalOpportunity, 800) + '-' + totalOpportunity}</p>
     </div>
   </div>
 
