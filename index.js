@@ -65,8 +65,18 @@ function analyzeScanResults(data) {
       });
       priorityScore += 2;
       
-      // Note about soldered RAM for MacBookPro11,x models
-      if (data.macModel.includes('MacBookPro11') || data.macModel.includes('MacBookAir')) {
+      // Note about soldered RAM for affected models
+      // MacBookPro11 (2014), MacBookPro12 (2015), MacBook8-10 (ALL MacBooks), most MacBookAir
+      const hasSolderedRAM = (
+        data.macModel.includes('MacBookPro11') ||
+        data.macModel.includes('MacBookPro12') ||
+        data.macModel.includes('MacBook8') ||
+        data.macModel.includes('MacBook9') ||
+        data.macModel.includes('MacBook10') ||
+        data.macModel.includes('MacBookAir')
+      );
+      
+      if (hasSolderedRAM) {
         flags.push({
           severity: 'CRITICAL',
           category: 'Memory',
@@ -128,7 +138,9 @@ function analyzeScanResults(data) {
   // Backup Check
   if (data.lastBackupDate) {
     const backup = data.lastBackupDate;
-    if (backup === 'Never') {
+    
+    // Check if no backup at all
+    if (!backup || backup === 'Never' || backup === 'Unknown') {
       flags.push({
         severity: 'CRITICAL',
         category: 'Data Protection',
@@ -140,21 +152,38 @@ function analyzeScanResults(data) {
       });
       priorityScore += 3;
       totalOpportunity += 149;
-    } else if (backup !== 'Unknown') {
+    } else {
+      // Check how old the backup is
       const daysOld = calculateDaysSinceBackup(backup);
-      if (daysOld > 30) {
+      
+      if (daysOld > 90) {
+        // 90+ days = CRITICAL
+        flags.push({
+          severity: 'CRITICAL',
+          category: 'Data Protection',
+          clientFacing: `Last backup: ${daysOld} days ago - critically outdated`,
+          issue: `Last backup: ${daysOld} days ago`,
+          recommendation: 'Re-enable and verify backup system immediately',
+          upsell: 'Backup setup service ($149)',
+          value: 149
+        });
+        priorityScore += 3;
+        totalOpportunity += 149;
+      } else if (daysOld > 30) {
+        // 30-90 days = MODERATE
         flags.push({
           severity: 'MODERATE',
           category: 'Data Protection',
-          clientFacing: `Last backup: ${daysOld} days ago`,
+          clientFacing: `Last backup: ${daysOld} days ago - needs attention`,
           issue: `Last backup: ${daysOld} days ago`,
-          recommendation: 'Backup schedule needs attention',
+          recommendation: 'Verify backup schedule and re-enable if needed',
           upsell: 'Backup setup service ($149)',
           value: 149
         });
         priorityScore += 2;
         totalOpportunity += 149;
       }
+      // If < 30 days, backup is good - no flag
     }
   }
 
@@ -227,6 +256,24 @@ function analyzeScanResults(data) {
       });
     }
   }
+  
+  // Storage Type Check - HDD vs SSD (HUGE performance opportunity)
+  if (data.storageType) {
+    const storageType = data.storageType.toUpperCase();
+    if (storageType.includes('HDD') || storageType.includes('HARD') || storageType.includes('MECHANICAL')) {
+      flags.push({
+        severity: 'MODERATE',
+        category: 'Storage',
+        clientFacing: `Mechanical hard drive (HDD) - SSD upgrade would dramatically improve speed`,
+        issue: 'HDD storage - major performance bottleneck',
+        recommendation: 'Upgrade to SSD for 5-10x faster performance',
+        upsell: 'SSD upgrade ($150-300)',
+        value: 200
+      });
+      priorityScore += 2;
+      totalOpportunity += 200;
+    }
+  }
 
   // === HARDWARE PRIORITY #3: MEMORY (RAM) ===
   // RAM is critical for performance and AI workloads
@@ -235,7 +282,17 @@ function analyzeScanResults(data) {
     const ram = data.totalRAM;
     const pressure = data.memoryPressure || 'Normal';
     const modelYear = extractYear(data.macModel || '');
-    const isSoldered = modelYear && modelYear <= 2015 && (data.macModel.includes('MacBookPro11') || data.macModel.includes('MacBookAir'));
+    
+    // Comprehensive soldered RAM detection
+    const isSoldered = (
+      data.macModel.includes('MacBookPro11') ||
+      data.macModel.includes('MacBookPro12') ||
+      data.macModel.includes('MacBook8') ||
+      data.macModel.includes('MacBook9') ||
+      data.macModel.includes('MacBook10') ||
+      data.macModel.includes('MacBookAir') ||
+      (modelYear && modelYear <= 2015)
+    );
     
     if (ram <= 8 && !isSoldered) {
       // Only flag RAM as upgradeable if it's NOT soldered
@@ -250,7 +307,7 @@ function analyzeScanResults(data) {
       });
       priorityScore += 3;  // HIGH PRIORITY
       totalOpportunity += (ram <= 4 ? 300 : 200);
-    } else if (ram < 16 && pressure !== 'Normal' && !isSoldered) {
+    } else if (ram < 16 && (pressure === 'Yellow' || pressure === 'Red' || pressure === 'High') && !isSoldered) {
       flags.push({
         severity: 'MODERATE',
         category: 'Memory',
@@ -367,7 +424,17 @@ function analyzeScanResults(data) {
   if (data.ramSpeed && data.ramSpeed > 0 && data.ramSpeed < 2400) {
     const isIntel = data.architecture && (data.architecture.toLowerCase().includes('x86') || data.architecture.toLowerCase().includes('intel'));
     const modelYear = extractYear(data.macModel || '');
-    const isSoldered = modelYear && modelYear <= 2015 && (data.macModel.includes('MacBookPro11') || data.macModel.includes('MacBookAir'));
+    
+    // Comprehensive soldered RAM detection
+    const isSoldered = (
+      data.macModel.includes('MacBookPro11') ||
+      data.macModel.includes('MacBookPro12') ||
+      data.macModel.includes('MacBook8') ||
+      data.macModel.includes('MacBook9') ||
+      data.macModel.includes('MacBook10') ||
+      data.macModel.includes('MacBookAir') ||
+      (modelYear && modelYear <= 2015)
+    );
     
     // Only flag if Intel AND RAM is NOT soldered (upgradeable)
     if (isIntel && !isSoldered) {
@@ -384,7 +451,77 @@ function analyzeScanResults(data) {
     }
   }
 
+  // === POSITIVE FLAGS FOR GOOD SYSTEMS ===
+  
   // External Monitor Assessment (positive note)
+  if (data.externalMonitors && data.externalMonitors > 0) {
+    flags.push({
+      severity: 'POSITIVE',
+      category: 'Display',
+      clientFacing: `${data.externalMonitors} external monitor${data.externalMonitors > 1 ? 's' : ''} connected - great for productivity`,
+      issue: 'External displays detected',
+      recommendation: 'Current setup is productivity-optimized',
+      upsell: null,
+      value: 0
+    });
+  }
+  
+  // High RAM (32GB+) - Positive
+  if (data.totalRAM && data.totalRAM >= 32) {
+    flags.push({
+      severity: 'POSITIVE',
+      category: 'Memory',
+      clientFacing: `${data.totalRAM}GB RAM - excellent for multitasking and professional workflows`,
+      issue: 'High RAM capacity',
+      recommendation: 'System well-equipped for demanding tasks',
+      upsell: null,
+      value: 0
+    });
+  }
+  
+  // M-series chip detection - Positive
+  if (data.cpuBrand && (data.cpuBrand.includes('M1') || data.cpuBrand.includes('M2') || data.cpuBrand.includes('M3') || data.cpuBrand.includes('M4'))) {
+    flags.push({
+      severity: 'POSITIVE',
+      category: 'Hardware Age',
+      clientFacing: `${data.cpuBrand.substring(0, 20)} - Modern Apple Silicon processor with excellent performance and efficiency`,
+      issue: 'Modern Apple Silicon',
+      recommendation: 'System is current-generation hardware',
+      upsell: null,
+      value: 0
+    });
+  }
+  
+  // Recent backup - Positive
+  if (data.lastBackupDate && data.lastBackupDate !== 'Never' && data.lastBackupDate !== 'Unknown') {
+    const daysOld = calculateDaysSinceBackup(data.lastBackupDate);
+    if (daysOld <= 7) {
+      flags.push({
+        severity: 'POSITIVE',
+        category: 'Data Protection',
+        clientFacing: `Recent backup (${daysOld === 0 ? 'today' : daysOld + ' days ago'}) - data well protected`,
+        issue: 'Regular backups active',
+        recommendation: 'Continue current backup schedule',
+        upsell: null,
+        value: 0
+      });
+    }
+  }
+  
+  // Excellent battery health - Positive
+  if (data.batteryCapacity && data.batteryCapacity >= 90 && data.batteryCycles && data.batteryCycles < 500) {
+    flags.push({
+      severity: 'POSITIVE',
+      category: 'Battery',
+      clientFacing: `Battery: ${data.batteryCapacity}% capacity with ${data.batteryCycles} cycles - excellent health`,
+      issue: 'Battery in excellent condition',
+      recommendation: 'No action needed',
+      upsell: null,
+      value: 0
+    });
+  }
+
+  // External Monitor Assessment (kept for backwards compatibility)
   if (data.externalMonitors && data.externalMonitors > 0) {
     flags.push({
       severity: 'POSITIVE',
@@ -444,17 +581,68 @@ function calculateDaysSinceBackup(backupDate) {
 }
 
 function extractYear(macModel) {
-  // Extract year from model identifiers like "MacBookPro11,3" or from cpuBrand
+  if (!macModel) return null;
+  
+  // First try: Look for explicit year in model string (e.g., "2014 MacBook Pro")
   const yearMatch = macModel.match(/20\d{2}/);
   if (yearMatch) {
     return parseInt(yearMatch[0]);
   }
   
-  // Fallback: try to infer from model number
-  if (macModel.includes('MacBookPro11') || macModel.includes('MacBookAir7')) return 2014;
-  if (macModel.includes('MacBookPro12') || macModel.includes('MacBookAir7')) return 2015;
-  if (macModel.includes('MacBookPro13') || macModel.includes('MacBookAir8')) return 2016;
+  // Second try: Comprehensive model number → year mapping
+  // Format: MacBookPro11,3 → Number after model name is the key
   
+  // MacBook Pro models
+  if (macModel.includes('MacBookPro18')) return 2021; // M1 Pro/Max
+  if (macModel.includes('MacBookPro17')) return 2020; // M1
+  if (macModel.includes('MacBookPro16')) return 2019;
+  if (macModel.includes('MacBookPro15')) return 2018;
+  if (macModel.includes('MacBookPro14')) return 2017;
+  if (macModel.includes('MacBookPro13')) return 2016;
+  if (macModel.includes('MacBookPro12')) return 2015;
+  if (macModel.includes('MacBookPro11')) return 2014; // Your system
+  if (macModel.includes('MacBookPro10')) return 2013;
+  if (macModel.includes('MacBookPro9')) return 2012;
+  if (macModel.includes('MacBookPro8')) return 2011;
+  
+  // MacBook Air models
+  if (macModel.includes('MacBookAir10')) return 2020; // M1
+  if (macModel.includes('MacBookAir9')) return 2020;
+  if (macModel.includes('MacBookAir8')) return 2018;
+  if (macModel.includes('MacBookAir7')) return 2015;
+  if (macModel.includes('MacBookAir6')) return 2013;
+  if (macModel.includes('MacBookAir5')) return 2012;
+  
+  // MacBook (12-inch, discontinued)
+  if (macModel.includes('MacBook10')) return 2017;
+  if (macModel.includes('MacBook9')) return 2016;
+  if (macModel.includes('MacBook8')) return 2015; // Bug #1 fix
+  
+  // iMac models
+  if (macModel.includes('iMac21')) return 2021; // M1
+  if (macModel.includes('iMac20')) return 2020;
+  if (macModel.includes('iMac19')) return 2019;
+  if (macModel.includes('iMac18')) return 2017;
+  if (macModel.includes('iMac17')) return 2015;
+  if (macModel.includes('iMac16')) return 2015;
+  if (macModel.includes('iMac15')) return 2014;
+  if (macModel.includes('iMac14')) return 2013;
+  if (macModel.includes('iMac13')) return 2012;
+  
+  // Mac mini models
+  if (macModel.includes('Macmini9')) return 2020; // M1
+  if (macModel.includes('Macmini8')) return 2018;
+  if (macModel.includes('Macmini7')) return 2014;
+  if (macModel.includes('Macmini6')) return 2012;
+  
+  // Mac Pro models
+  if (macModel.includes('MacPro7')) return 2019;
+  if (macModel.includes('MacPro6')) return 2013;
+  
+  // Mac Studio
+  if (macModel.includes('MacStudio')) return 2022; // M1 Max/Ultra
+  
+  // If no match found, return null
   return null;
 }
 
@@ -752,7 +940,8 @@ function generateClientEmail(data, analysis) {
       <ul style="margin: 10px 0; padding-left: 20px;">
         <li><strong>Slower performance</strong> - Your ${data.cpuBrand ? data.cpuBrand.substring(0, 40) : 'processor'} and ${data.totalRAM}GB RAM can't keep up with modern software demands</li>
         <li><strong>Software compatibility issues</strong> - Many apps now require newer processors and more memory than your system can provide</li>
-        ${data.batteryCapacity ? `<li><strong>Short battery life</strong> - At ${data.batteryCycles || 0} cycles and ${data.batteryCapacity}% capacity, you're running on borrowed time</li>` : ''}
+        ${data.batteryCapacity && data.batteryCapacity < 85 ? `<li><strong>Short battery life</strong> - At ${data.batteryCycles || 0} cycles and ${data.batteryCapacity}% capacity, runtime is significantly reduced</li>` : ''}
+        ${data.batteryCycles && data.batteryCycles > 800 && (!data.batteryCapacity || data.batteryCapacity >= 85) ? `<li><strong>Battery aging</strong> - At ${data.batteryCycles} cycles, battery may degrade rapidly in the coming months</li>` : ''}
         ${hardwareIssues.some(f => f.clientFacing.includes('soldered')) ? '<li><strong>Limited upgrade path</strong> - With soldered components and aging hardware, there\'s no way to extend this system\'s life through upgrades</li>' : ''}
         <li><strong>Resale value declining fast</strong> - Systems this old typically hit the "recycle vs resell" threshold around 10-12 years</li>
       </ul>
