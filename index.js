@@ -640,10 +640,110 @@ function extractYear(macModel) {
   if (macModel.includes('MacPro6')) return 2013;
   
   // Mac Studio
-  if (macModel.includes('MacStudio')) return 2022; // M1 Max/Ultra
+  if (macModel.includes('Mac14')) return 2022; // M1 Max/Ultra
   
   // If no match found, return null
   return null;
+}
+
+function formatModelForClient(macModel) {
+  // Convert "MacBookPro11,1" → "MacBook Pro 2014"
+  // For client-facing display (clean)
+  if (!macModel) return 'Unknown Model';
+  
+  const year = extractYear(macModel);
+  let modelName = 'Mac';
+  
+  if (macModel.includes('MacBookPro')) modelName = 'MacBook Pro';
+  else if (macModel.includes('MacBookAir')) modelName = 'MacBook Air';
+  else if (macModel.includes('MacBook')) modelName = 'MacBook';
+  else if (macModel.includes('iMac')) modelName = 'iMac';
+  else if (macModel.includes('Macmini')) modelName = 'Mac mini';
+  else if (macModel.includes('MacPro')) modelName = 'Mac Pro';
+  else if (macModel.includes('Mac14')) modelName = 'Mac Studio';
+  
+  return year ? `${modelName} ${year}` : modelName;
+}
+
+function formatModelForInternal(macModel) {
+  // Convert "MacBookPro11,1" → "MacBookPro11,1 (2014)"
+  // For internal use (technical + year)
+  if (!macModel) return 'Unknown Model';
+  
+  const year = extractYear(macModel);
+  return year ? `${macModel} (${year})` : macModel;
+}
+
+function getSoftwareCompatibilityExamples(data) {
+  // UPDATE QUARTERLY: Last updated February 2026
+  // Check: macOS requirements, Office/Adobe versions, browser minimums, LLM requirements
+  
+  const modelYear = extractYear(data.macModel || '');
+  const platform = data.platform || 'mac';
+  const isAppleSilicon = data.cpuBrand && (data.cpuBrand.includes('M1') || data.cpuBrand.includes('M2') || data.cpuBrand.includes('M3') || data.cpuBrand.includes('M4'));
+  const ram = data.totalRAM || 0;
+  
+  let incompatible = [];
+  let limited = [];
+  
+  if (platform === 'mac') {
+    // macOS Compatibility
+    if (modelYear && modelYear <= 2015) {
+      incompatible.push('macOS Sequoia (requires 2017+ Mac or Apple Silicon)');
+    } else if (modelYear && modelYear <= 2017 && !isAppleSilicon) {
+      limited.push('Latest macOS features (some require Apple Silicon)');
+    }
+    
+    // Adobe Creative Cloud
+    if (ram < 16 || (modelYear && modelYear <= 2016)) {
+      incompatible.push('Adobe Creative Cloud 2025 (requires 16GB RAM + macOS Monterey or newer)');
+    }
+    
+    // Microsoft Office
+    if (modelYear && modelYear <= 2015) {
+      incompatible.push('Microsoft Office 2024 (requires macOS Big Sur or newer)');
+    }
+    
+    // Modern Browsers
+    if (modelYear && modelYear <= 2014) {
+      limited.push('Latest Chrome/Firefox versions (may have performance issues)');
+    }
+    
+    // AI/LLM Applications
+    if (!isAppleSilicon && (modelYear && modelYear <= 2018)) {
+      incompatible.push('Local AI applications like Ollama (prefer Apple Silicon or 2019+ Intel with 16GB+ RAM)');
+    } else if (ram < 16) {
+      limited.push('AI applications (require 16GB+ RAM for optimal performance)');
+    }
+    
+    // Canva Desktop
+    if (modelYear && modelYear <= 2016) {
+      limited.push('Canva desktop app (requires macOS Catalina or newer)');
+    }
+    
+  } else if (platform === 'windows') {
+    // Windows 11 Compatibility
+    if (modelYear && modelYear <= 2017) {
+      incompatible.push('Windows 11 (requires 8th gen Intel or AMD Ryzen 2000+)');
+    }
+    
+    // Adobe Creative Cloud
+    if (ram < 16) {
+      incompatible.push('Adobe Creative Cloud 2025 (requires 16GB RAM)');
+    }
+    
+    // Microsoft Office
+    if (modelYear && modelYear <= 2014) {
+      incompatible.push('Microsoft Office 2024 (requires Windows 10 or newer)');
+    }
+    
+    // AI/LLM Applications
+    if (ram < 16) {
+      incompatible.push('Local AI applications (require 16GB+ RAM)');
+    }
+  }
+  
+  return { incompatible, limited };
 }
 
 // ========== HONEST TIMELINE GENERATION ==========
@@ -884,8 +984,8 @@ function generateClientEmail(data, analysis) {
       <h3 style="margin-top: 0; color: #5b7db1;">Quick Summary</h3>
       <table style="width: 100%; border-collapse: collapse;">
         <tr>
-          <td style="padding: 8px 0;"><strong>Mac Model:</strong></td>
-          <td style="padding: 8px 0;">${macModel || 'Unknown'}</td>
+          <td style="padding: 8px 0;"><strong>System:</strong></td>
+          <td style="padding: 8px 0;">${formatModelForClient(macModel)}</td>
         </tr>
         <tr>
           <td style="padding: 8px 0;"><strong>Processor:</strong></td>
@@ -909,7 +1009,7 @@ function generateClientEmail(data, analysis) {
         <h4 style="margin: 0 0 10px 0; color: #5b7db1; font-size: 14px;">Key Health Metrics:</h4>
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 13px;">
           <div><strong>Battery:</strong> ${data.batteryCapacity || 0}% (${data.batteryCycles || 0} cycles)</div>
-          <div><strong>Last Backup:</strong> ${data.lastBackupDate ? new Date(data.lastBackupDate).toLocaleDateString() : 'Never'}</div>
+          <div><strong>Last Backup:</strong> ${data.lastBackupDate && data.lastBackupDate !== 'Never' && data.lastBackupDate !== 'Unknown' ? new Date(data.lastBackupDate).toLocaleDateString() : 'None Detected'}</div>
           <div><strong>Firewall:</strong> ${data.firewallEnabled ? 'ON' : 'OFF'}</div>
           <div><strong>Disk Encryption:</strong> ${data.fileVaultEnabled ? 'ON' : 'OFF'}</div>
           <div><strong>Software Updates:</strong> ${data.softwareUpdateStatus === 'Check manually' ? 'Updates needed' : data.softwareUpdateStatus || 'Unknown'}</div>
@@ -939,11 +1039,30 @@ function generateClientEmail(data, analysis) {
       <p style="margin: 10px 0;">Based on your ${data.platform === 'windows' ? 'PC' : 'Mac'}'s hardware age and limitations, here's what you're experiencing (or will soon):</p>
       <ul style="margin: 10px 0; padding-left: 20px;">
         <li><strong>Slower performance</strong> - Your ${data.cpuBrand ? data.cpuBrand.substring(0, 40) : 'processor'} and ${data.totalRAM}GB RAM can't keep up with modern software demands</li>
-        <li><strong>Software compatibility issues</strong> - Many apps now require newer processors and more memory than your system can provide</li>
+        ${(() => {
+          const softwareCompat = getSoftwareCompatibilityExamples(data);
+          const modelYear = extractYear(data.macModel || '');
+          
+          if (softwareCompat.incompatible.length > 0) {
+            const displayList = softwareCompat.incompatible.slice(0, 3);
+            const remaining = softwareCompat.incompatible.length - 3;
+            return `<li><strong>Software compatibility issues</strong> - Cannot run:<ul style="margin: 5px 0; padding-left: 20px;">${displayList.map(s => '<li style="margin: 3px 0;">' + s + '</li>').join('')}${remaining > 0 ? '<li style="margin: 3px 0; font-style: italic;">...and ' + remaining + ' other modern application' + (remaining === 1 ? '' : 's') + '</li>' : ''}</ul></li>`;
+          } else if (softwareCompat.limited.length > 0) {
+            return `<li><strong>Software limitations</strong> - Some applications may have reduced performance or features</li>`;
+          }
+          return '';
+        })()}
         ${data.batteryCapacity && data.batteryCapacity < 85 ? `<li><strong>Short battery life</strong> - At ${data.batteryCycles || 0} cycles and ${data.batteryCapacity}% capacity, runtime is significantly reduced</li>` : ''}
         ${data.batteryCycles && data.batteryCycles > 800 && (!data.batteryCapacity || data.batteryCapacity >= 85) ? `<li><strong>Battery aging</strong> - At ${data.batteryCycles} cycles, battery may degrade rapidly in the coming months</li>` : ''}
         ${hardwareIssues.some(f => f.clientFacing.includes('soldered')) ? '<li><strong>Limited upgrade path</strong> - With soldered components and aging hardware, there\'s no way to extend this system\'s life through upgrades</li>' : ''}
-        <li><strong>Resale value declining fast</strong> - Systems this old typically hit the "recycle vs resell" threshold around 10-12 years</li>
+        ${(() => {
+          const modelYear = extractYear(data.macModel || '');
+          // Only show for 7-9 year systems (warning zone), not 10+ (already obvious)
+          if (modelYear && modelYear >= 2016 && modelYear <= 2018) {
+            return '<li><strong>Planning window</strong> - You\'re approaching the 7-9 year mark where most systems hit end-of-software-support. Good time to start researching options, not urgent yet.</li>';
+          }
+          return '';
+        })()}
       </ul>
       <p style="margin: 10px 0;"><strong>The good news?</strong> You're catching this before an emergency forces your hand. That gives you time to plan.</p>
     </div>
@@ -952,7 +1071,7 @@ function generateClientEmail(data, analysis) {
       <h3 style="margin-top: 0; color: #5b7db1;">📞 What Happens Next</h3>
       <p style="margin: 10px 0;">This scan identified ${criticalCount} critical hardware issue${criticalCount === 1 ? '' : 's'} and ${moderateCount} optimization opportunit${moderateCount === 1 ? 'y' : 'ies'}. The diagnostic is complete - now let's discuss your options.</p>
       
-      <p style="margin: 15px 0;"><strong>In a quick 15-minute call, I'll help you:</strong></p>
+      <p style="margin: 15px 0;"><strong>In a FREE 15-minute strategy call, I'll help you:</strong></p>
       <ol style="margin: 10px 0; padding-left: 20px;">
         <li style="margin: 8px 0;"><strong>Understand your timeline</strong> - Based on your system's age and condition, when do you realistically need to make a move?</li>
         <li style="margin: 8px 0;"><strong>Evaluate your options</strong> - New ${data.platform === 'windows' ? 'PC' : 'Mac'}? Refurbished? Targeted repairs? What makes sense for your budget and workflow?</li>
@@ -961,7 +1080,7 @@ function generateClientEmail(data, analysis) {
       </ol>
 
       <div style="text-align: center; margin: 25px 0;">
-        <a href="https://calendly.com/drwinmac" style="display: inline-block; background: #5b7db1; color: white; padding: 15px 40px; text-decoration: none; border-radius: 6px; font-weight: bold; font-size: 16px;">📅 BOOK YOUR 15-MINUTE STRATEGY CALL</a>
+        <a href="https://www.drwinmac.tech/services.html" style="display: inline-block; background: #5b7db1; color: white; padding: 15px 40px; text-decoration: none; border-radius: 6px; font-weight: bold; font-size: 16px;">📅 BOOK YOUR FREE 15-MINUTE CALL</a>
       </div>
 
       <p style="margin: 15px 0; padding: 15px; background: #fff3cd; border-left: 4px solid #ffc107; font-size: 14px;"><strong>⏰ Limited Availability:</strong> I work solo (by choice), so I limit consultations to 3 per week to give each client proper attention.</p>
@@ -972,12 +1091,12 @@ function generateClientEmail(data, analysis) {
     </div>
 
     <div style="background: #f5f5f5; border-radius: 8px; padding: 20px; margin: 20px 0;">
-      <h3 style="margin-top: 0; color: #333;">Why Dr.WinMac?</h3>
+      <h3 style="margin-top: 0; color: #333;">Why Dr.WinMac Tech Solutions LLC?</h3>
       <p style="margin: 10px 0;">I've been working with PCs and Macs since 1999 - started during the Y2K transition helping businesses navigate hardware upgrades and system migrations. 25+ years across both platforms.</p>
       <p style="margin: 10px 0;">My focus is simple: <strong>hardware diagnostics, upgrade planning, and helping you avoid expensive mistakes.</strong> I don't sell computers, don't get vendor commissions, and I don't push services you don't need.</p>
       <p style="margin: 10px 0;">Whether you're running Windows or macOS, this scan gives you the full picture before making any decisions.</p>
       <p style="margin: 15px 0 5px 0;">- Jeremy<br>
-      Dr.WinMac<br>
+      Dr.WinMac Tech Solutions LLC<br>
       <a href="mailto:Jeremy@drwinmac.tech" style="color: #5b7db1;">Jeremy@drwinmac.tech</a></p>
     </div>
 
@@ -985,7 +1104,7 @@ function generateClientEmail(data, analysis) {
   </div>
 
   <div style="border-top: 2px solid #eee; padding-top: 20px; margin-top: 30px; text-align: center; color: #999; font-size: 12px;">
-    <p>© 2026 Dr.WinMac. All rights reserved.</p>
+    <p>© 2026 Dr.WinMac Tech Solutions LLC. All rights reserved.</p>
     <p><a href="https://www.drwinmac.tech" style="color: #5b7db1;">www.drwinmac.tech</a></p>
   </div>
 
@@ -1113,7 +1232,7 @@ function generateInternalEmail(data, analysis) {
     <h3>SYSTEM INFO:</h3>
     <ul>
       <li>macOS: ${data.osName || 'Unknown'} (${data.osVersion || 'Unknown'})</li>
-      <li>Model: ${data.macModel || 'Unknown'}</li>
+      <li>Model: ${formatModelForInternal(data.macModel || 'Unknown')}</li>
       <li>CPU: ${data.cpuBrand || 'Unknown'} (${data.physicalCores || 0} cores)</li>
       <li>RAM: ${data.totalRAM || 0} GB</li>
       <li>Storage: ${data.totalStorage || 0} GB ${data.storageType || ''} (${data.freeStoragePercent || 0}% free)</li>
@@ -1123,7 +1242,7 @@ function generateInternalEmail(data, analysis) {
     <h3>HEALTH METRICS:</h3>
     <ul>
       <li>Battery: ${data.batteryCapacity || 100}% capacity, ${data.batteryCycles || 0} cycles (${data.batteryCondition || 'N/A'})</li>
-      <li>Last Backup: ${data.lastBackupDate || 'Never'}</li>
+      <li>Last Backup: ${data.lastBackupDate && data.lastBackupDate !== 'Never' && data.lastBackupDate !== 'Unknown' ? data.lastBackupDate : 'None Detected'}</li>
       <li>Firewall: ${data.firewallEnabled ? 'ON' : 'OFF'}</li>
       <li>FileVault: ${data.fileVaultEnabled ? 'ON' : 'OFF'}</li>
       <li>SIP (System Integrity Protection): ${data.sipEnabled ? 'ON' : 'OFF'}</li>
