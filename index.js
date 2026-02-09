@@ -676,7 +676,7 @@ function formatModelForInternal(macModel) {
 
 function getSoftwareCompatibilityExamples(data) {
   // UPDATE QUARTERLY: Last updated February 2026
-  // Check: macOS requirements, Office/Adobe versions, browser minimums, LLM requirements
+  // Check: macOS requirements, Office versions, browser minimums, Canva, LLM requirements
   
   const modelYear = extractYear(data.macModel || '');
   const platform = data.platform || 'mac';
@@ -694,11 +694,6 @@ function getSoftwareCompatibilityExamples(data) {
       limited.push('Latest macOS features (some require Apple Silicon)');
     }
     
-    // Adobe Creative Cloud
-    if (ram < 16 || (modelYear && modelYear <= 2016)) {
-      incompatible.push('Adobe Creative Cloud 2025 (requires 16GB RAM + macOS Monterey or newer)');
-    }
-    
     // Microsoft Office
     if (modelYear && modelYear <= 2015) {
       incompatible.push('Microsoft Office 2024 (requires macOS Big Sur or newer)');
@@ -706,35 +701,35 @@ function getSoftwareCompatibilityExamples(data) {
     
     // Modern Browsers
     if (modelYear && modelYear <= 2014) {
-      limited.push('Latest Chrome/Firefox versions (may have performance issues)');
+      incompatible.push('Latest Chrome/Firefox versions (outdated processor)');
     }
     
-    // AI/LLM Applications
+    // Canva Desktop
+    if (modelYear && modelYear <= 2016) {
+      incompatible.push('Canva desktop app (requires macOS Catalina or newer)');
+    }
+    
+    // AI/LLM Applications (Ollama, etc)
     if (!isAppleSilicon && (modelYear && modelYear <= 2018)) {
       incompatible.push('Local AI applications like Ollama (prefer Apple Silicon or 2019+ Intel with 16GB+ RAM)');
     } else if (ram < 16) {
       limited.push('AI applications (require 16GB+ RAM for optimal performance)');
     }
     
-    // Canva Desktop
-    if (modelYear && modelYear <= 2016) {
-      limited.push('Canva desktop app (requires macOS Catalina or newer)');
-    }
-    
   } else if (platform === 'windows') {
-    // Windows 11 Compatibility
+    // Windows 11
     if (modelYear && modelYear <= 2017) {
       incompatible.push('Windows 11 (requires 8th gen Intel or AMD Ryzen 2000+)');
-    }
-    
-    // Adobe Creative Cloud
-    if (ram < 16) {
-      incompatible.push('Adobe Creative Cloud 2025 (requires 16GB RAM)');
     }
     
     // Microsoft Office
     if (modelYear && modelYear <= 2014) {
       incompatible.push('Microsoft Office 2024 (requires Windows 10 or newer)');
+    }
+    
+    // Modern Browsers
+    if (modelYear && modelYear <= 2014) {
+      incompatible.push('Latest Chrome/Firefox versions (outdated processor)');
     }
     
     // AI/LLM Applications
@@ -997,7 +992,11 @@ function generateClientEmail(data, analysis) {
         </tr>
         <tr>
           <td style="padding: 8px 0;"><strong>Storage:</strong></td>
-          <td style="padding: 8px 0;">${totalStorage || 0} GB ${storageType || ''} (${freeStoragePercent || 0}% free)</td>
+          <td style="padding: 8px 0;">${totalStorage || 0} GB${storageType && storageType !== 'Unknown' ? ' ' + storageType : ''} (${freeStoragePercent || 0}% free)</td>
+        </tr>
+        <tr>
+          <td style="padding: 8px 0;"><strong>Graphics:</strong></td>
+          <td style="padding: 8px 0;">${data.gpuModel && data.gpuModel !== 'Unknown' ? data.gpuModel : 'Not detected'}</td>
         </tr>
         <tr>
           <td style="padding: 8px 0;"><strong>Overall AI Preparedness Grade:</strong></td>
@@ -1235,8 +1234,8 @@ function generateInternalEmail(data, analysis) {
       <li>Model: ${formatModelForInternal(data.macModel || 'Unknown')}</li>
       <li>CPU: ${data.cpuBrand || 'Unknown'} (${data.physicalCores || 0} cores)</li>
       <li>RAM: ${data.totalRAM || 0} GB</li>
-      <li>Storage: ${data.totalStorage || 0} GB ${data.storageType || ''} (${data.freeStoragePercent || 0}% free)</li>
-      <li>GPU: ${data.gpuModel || 'Unknown'}</li>
+      <li>Storage: ${data.totalStorage || 0} GB${data.storageType && data.storageType !== 'Unknown' ? ' ' + data.storageType : ''} (${data.freeStoragePercent || 0}% free)</li>
+      <li>GPU: ${data.gpuModel && data.gpuModel !== 'Unknown' ? data.gpuModel : 'Not detected'}</li>
     </ul>
 
     <h3>HEALTH METRICS:</h3>
